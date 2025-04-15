@@ -9,12 +9,17 @@ class NetcdfTranslator:
     The filename_format is used to match the files in the input_path.
     The input_path and output_path are expected to be directories.
     """
-    def __init__(self, input_path, output_path, filename_format):
+    def __init__(self, input_path, output_path, station_filename,
+                 filename_format, name_template=None):
         self.filename_format = filename_format
 
-        self.input_path = Path(input_path)
-        self.output_path = Path(output_path)
-        self.data = None
+        self.input_path = Path(input_path).absolute()
+        self.output_path = Path(output_path).absolute()
+        self.data = dict()
+        self.station_info = dict()
+    @abstractmethod
+    def setup_data(self):
+        pass
 
     @abstractmethod
     def process_df(self, df):
@@ -24,18 +29,27 @@ class NetcdfTranslator:
     def load_file(self, file):
         pass
 
-    def load_multifile(self):
-        for file in self.input_path.glob(self.filename_format):
-            self.data = self.load_file(file)
-
+    @abstractmethod
+    def get_station_info(self):
+        pass
+    
+    @abstractmethod
     def load_data(self):
-        self.load_multifile()
-        return self.data
+        pass
     
+    def data_to_xarray(self, ddf):
+        # create the right dimensions, vars and coords for the xarray dataset
+        return ddf.to_xarray()
+        
     def to_netcdf(self):
-        self.data.to_netcdf(self.output_path / f"{self.input_path.stem}.nc", format="NETCDF4", unlimited_dims="time")
-    
+        for typ in self.data:
+            #convert data to xarray
+            data = typ["data"]
+            xr = self.data_to_xarray(data)
+            xr.to_netcdf(self.output_path / f"{typ["out_name"]}.nc", format="NETCDF4", unlimited_dims="time")
+
     def run(self):
         self.load_data()
         self.to_netcdf()
+
         return self.data
