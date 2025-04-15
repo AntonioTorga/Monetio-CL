@@ -1,4 +1,4 @@
-from download.downloader import Downloader
+from data_download.downloader import Downloader
 from translate.sincatranslator import SincaToNetCdf
 from translate.dmctranslator import DmcToNetCdf
 

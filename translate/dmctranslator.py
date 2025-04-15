@@ -1,4 +1,4 @@
-from translator import NetcdfTranslator
+from translate.translator import NetcdfTranslator
 
 class DmcToNetCdf(NetcdfTranslator):
     """Class for translating DMC data to NetCDF format.

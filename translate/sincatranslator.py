@@ -1,4 +1,4 @@
-from translator import NetcdfTranslator
+from translate.translator import NetcdfTranslator
 
 class SincaToNetCdf(NetcdfTranslator):
 
