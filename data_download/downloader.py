@@ -9,4 +9,3 @@ class Downloader:
     def get(self, endpoint: str):
         client = WebClient(self.url)
         return client.get(endpoint)
-        
