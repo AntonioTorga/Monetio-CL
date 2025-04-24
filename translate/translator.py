@@ -20,7 +20,7 @@ class Translator:
 
         file_info = {
             "input_file" : {
-                "regex": kwargs["input_file_regex"] if kwargs["input_file_regex"] else ".*(\d+).*\.csv",
+                "regex": kwargs["input_file_regex"] if kwargs["input_file_regex"] else "(\d*)-(Met|Cal)-(\d*)-(\d*).json",
                 },
             "intermediate_file" : {
                 "regex": kwargs["intermediate_file_regex"] if kwargs["intermediate_file_regex"] else "(\d+)--(.*)\.csv",
