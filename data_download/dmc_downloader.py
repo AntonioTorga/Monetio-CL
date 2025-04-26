@@ -24,6 +24,8 @@ class DMCDownloader(Downloader):
         Filters the data by the timestamps required.
         """
         filtered_data = []
+        # TODO: separate the getting of data because it could be data["..."]["..."] or data["..."][0]["..."]
+        # and one of those shouldn't work.
         for data_dict in data["datosEstaciones"]["datos"]:
             if data_dict["momento"] in self.timestamps:
                 filtered_data.append(data_dict)
@@ -78,7 +80,7 @@ class DMCDownloader(Downloader):
                 for station_id in self.station_ids:
                     for year, month in monthly_timestamps:
                         url = self.data_url.format(station_id, year, month, self.user["mail"], self.user["api_key"])
-                        tasks.append(asyncio.create_task(fetch_data(client, url)))
+                        tasks.append(asyncio.create_task(fetch_data(client, url, station_id, year, month)))
 
                 results = await asyncio.gather(*tasks)
                 return results

@@ -4,6 +4,7 @@ from dask import dataframe as dd
 from dask.diagnostics import ProgressBar
 import xarray as xr
 import re
+import json
 
 
 class Translator:
@@ -11,56 +12,77 @@ class Translator:
     Translates data from raw to intermediate format, and intermediate to netcdf 
     (Melodies-Monet ready) format.
     """
-    def __init__(self, input_path, output_path, station_fn, **kwargs):
+    def __init__(self, input_path, output_path, **kwargs):
         self.input_path = Path(input_path)
         self.intermediate_path = kwargs["intermediate_path"] if kwargs["intermediate_path"] else self.input_path / "intermediate"
         self.output_path = Path(output_path)
 
-        self.station_fn = kwargs["station_fn"] if kwargs["station_fn"] else "station.csv"
-
-        file_info = {
+        #TODO: move info to a config file
+        self.file_info = {
             "input_file" : {
-                "regex": kwargs["input_file_regex"] if kwargs["input_file_regex"] else "(\d*)-(Met|Cal)-(\d*)-(\d*).json",
+                "regex": kwargs["input_file_regex"] if kwargs["input_file_regex"] else "(\d*)-(Met|Cal)-(\d*)-(\d*).json", # IDStation-Type-Year-Month
                 },
             "intermediate_file" : {
-                "regex": kwargs["intermediate_file_regex"] if kwargs["intermediate_file_regex"] else "(\d+)--(.*)\.csv",
-                "format": kwargs["intermediate_file_format"] if kwargs["intermediate_file_format"] else "{0}--{1}.csv",
+                "regex":  "(\d+)--(.*)\.csv", # IDStation-Type
+                "format": "{0}--{1}.csv", # IDStation-Type
                 },
             "output_file" : {
-                "format": kwargs["output_file_format"] if kwargs["output_file_format"] else "{0}--{1}.nc",
+                "format": kwargs["output_file_format"] if kwargs["output_file_format"] else "{0}--{1}.nc", # Network-Type
                 },
+            "station_file" : {
+                "raw_regex" : kwargs["station_file_name"]+".json" if kwargs["station_file_name"] else "stations.json",
+                "intermediate_regex" : kwargs["station_file_name"]+".csv" if kwargs["station_file_name"] else "stations.csv",
+            }
         }
 
     @abstractmethod
-    def raw_to_intermediate_file(self, file):
+    def raw_to_intermediate_file(self, files, filename, save=False):
+        pass
+
+    @abstractmethod
+    def raw_to_intermediate_station_format(self):
         pass
     
-    def load_intermediate_data(self) -> dd:
+    def load_intermediate_data(self):
         """
         Loads the intermediate data from the intermediate path.
         Assumes all the data must be merged into a single dataframe.
         """
-        files = [f for f in Path(self.intermediate_path).iterdir() if f.is_file() and re.search(self.intermediate_fn_format, f.name)]        
+       # files = [f for f in Path(self.intermediate_path).iterdir() if f.is_file() and re.search(self.file_info["intermediate_file"]["regex"], f.name)]        
+        data = {}
+        for f in Path(self.intermediate_path).iterdir():
+            match = re.search(self.file_info["intermediate_file"]["regex"], f.name)
+            if f.is_file() and match:
+                # get the station id and type from the filename
+                station_id = match.group(1)
+                station_type = match.group(2)
+                data[station_id] = {
+                    "station_id": station_id,
+                    "station_type": station_type,
+                    "file": f, 
+                    "data": dd.read_csv(f, sep=",", decimal=".")
+                }
         
-        ddfs = []
-        for file in files:
-            # load the data
-            _ddf = dd.read_csv(file, sep=",", decimal=".")
-            ddfs+=_ddf
-        
-        station_df = dd.read_csv(self.intermediate_path / self.station_fn, sep=",", decimal=".")
+        station_df = dd.read_csv(self.intermediate_path / self.file_info["station_file"]["intermediate_regex"], sep=",", decimal=".")
 
-        return ddfs, station_df
+        return data, station_df
 
-    def intermediate_to_xarray(self, ddfs, station_df):
+    def intermediate_to_xarray(self, data, station_df):
         """
         Converts the intermediate data to xarray format.
         ddfs: list of dask dataframes for each station.
         """
         ddf = dd.DataFrame()
-        for ddf_ in ddfs:
+        for station in data:
+            ddf_ = station["data"]
+            ddf_["siteid"] = station["station_id"]
+            station_data = station_df.loc[station_df["station_id"], ["latitude", "longitude", "elevation"]]
+            ddf_["latitude"] = station_data["latitud"]
+            ddf_["longitude"] = station_data["longitud"]
+            ddf_["elevation"] = station_data["altitud"]
             
             ddf = ddf.merge(ddf_, how="outer")
+            
         
         ds = (ddf.set_index(["siteid", "time"])
             .to_xarray()
@@ -73,31 +95,6 @@ class Translator:
 
         return ds
     
-    def raw_to_intermediate_format(self, input_fn_format = None, save=False):
-        # TODO: check that is correct
-        # ASSUMES: the input path has raw data in the format of the input_fn_format that
-        # is meant for a single intermediate file.
-        # For MULTIPLE ones, we must call this function for every different filename format.
-        # turn all files with the filename format to intermediate format
-        # for each file in the input path, load the data and process it
-
-        input_fn_format = input_fn_format if input_fn_format else self.input_fn_format
-
-        ddf = dd.DataFrame()
-
-        files = [f for f in Path(self.input_path).iterdir() if f.is_file() and re.search(input_fn_format, f.name)]        
-
-        for file in files:
-            # load the data
-            _ddf= self.raw_to_intermediate_ddf(file)
-            ddf.merge(_ddf, how="outer")
-
-        if save:
-            # save the data to the output path
-            ddf.to_csv(self.intermediate_path/ self.intermediate_fn_format, index=False, sep=",", decimal=".")
-        
-        return ddf
-
     def xarray_to_netcdf(self, xarray):
             """
             Save the xarray dataset to netcdf format in the output path.
@@ -107,6 +104,50 @@ class Translator:
 
             xarray.to_netcdf(self.output_path / f"{self.output_fn}.nc", format="NETCDF4", unlimited_dims="time" )
 
+    def from_raw_to_intermediate_format(self, save=False):
+        """
+        Converts the raw data to intermediate format.
+        Collects all the raw files that go into each intermediate station file.
+        """
+        filename_regex = self.file_info["input_file"]["regex"]
+
+        # get the list of files in the input path that match the regex
+        file_list = sorted(Path(self.input_path).iterdir(), key=lambda entry: entry.name)
+        
+        stations = {} # dictionary to store the raw files that compose each intermediate file for a station.
+        for f in file_list:
+            match = re.search(filename_regex, f.name)
+            if f.is_file() and match:
+                # get the station id and type from the filename
+                station_id = match.group(1)
+                station_type = match.group(2)
+                year = match.group(3)
+                month = match.group(4)
+
+                if stations.get(station_id) == None:
+                    stations[station_id] = {
+                        "station_id": station_id,
+                        "station_intermediate_filename": self.file_info["intermediate_file"]["format"].format(station_id, station_type),
+                        "files": [],
+                    }
+                stations[station_id]["files"].append(f)
+        
+        ddfs = {} # dictionary that will hold the dask dataframes for each station.
+        for station_id in stations.keys():
+            files = stations[station_id]["files"]
+            intermediate_filename = stations[station_id]["station_intermediate_filename"]
+
+            data = self.raw_to_intermediate_file(files, intermediate_filename, save=save)
+            ddfs[station_id] = {
+                "station_id": station_id,
+                "station_filename": intermediate_filename,
+                "data": data,
+            }
+
+        station_ddf = self.raw_to_intermediate_station_format()
+        
+        return ddfs, station_ddf
+    
     def from_intermediate_to_netcdf(self):
         """
         Converts the intermediate data to netcdf format.
@@ -116,13 +157,12 @@ class Translator:
         self.xarray_to_netcdf(xarray)
 
     def from_raw_to_netcdf(self, save=False):
-        # TODO: fix logic to adapt to multiple intermediate files.
         """
         Converts the raw data to netcdf format.
         """
         # load the data from the input path
-        ddf = self.raw_to_intermediate_format(save=save)
+        ddfs, station_ddf = self.from_raw_to_intermediate_format(save=save)
         # convert the data to xarray format
-        xarray = self.intermediate_to_xarray(ddf)
+        xarray = self.intermediate_to_xarray(ddfs, station_ddf)
         # save the data to netcdf format
         self.xarray_to_netcdf(xarray)

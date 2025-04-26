@@ -14,4 +14,4 @@ class SINCATranslator(Translator):
         super().__init__(input_path, output_path, station_filename, r"ID-(\d+)--(Met|Cal)_HH.csv")
         self.obs_regex = r"(\w+)(--H(\d*))?_([\w/|%]+)"
 
-    def 
+        
