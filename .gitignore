@@ -3,3 +3,6 @@
 /*.egg-info/
 test.py
 *.json
+/data
+/raw_data
+/data_nc

@@ -4,7 +4,6 @@ from pathlib import Path
 from datetime import datetime
 from dateutil import parser
 
-
 class Downloader:
     def __init__(self, start_timestamp, end_timestamp, time_interval='H'):
         """

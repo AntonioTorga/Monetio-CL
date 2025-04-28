@@ -72,18 +72,22 @@ class Translator:
         Converts the intermediate data to xarray format.
         ddfs: list of dask dataframes for each station.
         """
-        ddf = dd.DataFrame()
-        for station in data:
-            ddf_ = station["data"]
-            ddf_["siteid"] = station["station_id"]
-            station_data = station_df.loc[station_df["station_id"], ["latitude", "longitude", "elevation"]]
-            ddf_["latitude"] = station_data["latitud"]
-            ddf_["longitude"] = station_data["longitud"]
-            ddf_["elevation"] = station_data["altitud"]
-            
+        ddf = dd.from_dict({}, npartitions=10)
+
+        for station_id, info in data.items():
+            ddf_ = info["data"]
+            ddf_["siteid"] = station_id
+            station_data = station_df.loc[station_id, ["latitud", "longitud", "altura"]].compute()
+            ddf_["latitude"] = station_data["latitud"].iloc[0]
+            ddf_["longitude"] = station_data["longitud"].iloc[0]
+            ddf_["elevation"] = station_data["altitud"].iloc[0]
+            ddf_ = ddf_.rename(columns={"momento": "time"})
+            # cast all columns to string
+            ddf_ = ddf_.astype(str)
+
             ddf = ddf.merge(ddf_, how="outer")
             
-        
+        # TODO: fix this part, doesn't work with dask dataframe
         ds = (ddf.set_index(["siteid", "time"])
             .to_xarray()
             .swap_dims(siteid="x")
@@ -102,7 +106,7 @@ class Translator:
             if self.output_path.is_dir() == False:
                 self.output_path.mkdir(parents=True, exist_ok=True)
 
-            xarray.to_netcdf(self.output_path / f"{self.output_fn}.nc", format="NETCDF4", unlimited_dims="time" )
+            xarray.to_netcdf(self.output_path / (self.output_fn+".nc"), format="NETCDF4", unlimited_dims="time" )
 
     def from_raw_to_intermediate_format(self, save=False):
         """

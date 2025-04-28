@@ -1,32 +1,32 @@
-from data_download.downloader import Downloader
-from translate.sincatranslator import SincaToNetCdf
-from translate.dmctranslator import DmcToNetCdf
+from data_download.dmc_downloader import DMCDownloader
+from translate.dmc_translator import DMCTranslator
+
 
 import typer
 from rich import print
     
 app = typer.Typer(name="Monetio-CL", help="Monetio Command Line Interface")
 
-downloader = Downloader()
-
+# TODO: connect this to the actual code
 @app.command()
 def get_sinca(start_date: str, end_date: str):
     """
     Get the SINCA data from the start_date to the end_date in Melodies-Monet format.
     """
-    downloader.download_sinca(start_date, end_date)
-    translator = sinca(
-
-    )
     print("Downloading SINCA data...")
-    pass
+    return 0
 
 @app.command()
-def get_dmc(start_date: str, end_date: str):
+def get_dmc(start_date: str, end_date: str, timestep: str):
     """
     Get the DMC data from the start_date to the end_date in Melodies-Monet format.
     """
-    downloader.download_dmc(start_date, end_date)
+    dmc_downloader = DMCDownloader()
+    dmc_translator = DMCTranslator()
+
+    dmc_downloader.download(start_date, end_date, timestep)
+    dmc_translator.translate(start_date, end_date, timestep)
+
 
     # Implement the logic to get the DMC data
     pass
