@@ -5,7 +5,7 @@ from datetime import datetime
 from dateutil import parser
 
 class Downloader:
-    def __init__(self, start_timestamp, end_timestamp, time_interval='H'):
+    def __init__(self, start_timestamp, end_timestamp, raw_data_path, time_interval):
         """
         Downloader class to download data from the API.
         """
@@ -17,8 +17,10 @@ class Downloader:
         }
         self.data_type = None
         
-        self.output_path = Path.cwd() / "raw_data"
-        self.output_path.mkdir(parents=True, exist_ok=True)
+        self.raw_data_path = Path(raw_data_path)
+        if not self.raw_data_path.is_absolute():
+            self.raw_data_path = Path.cwd() / self.raw_data_path
+        self.raw_data_path.mkdir(parents=True, exist_ok=True)
         self.data_fn_format = "{0}-{1}-{2}-{3}.json" # station, type, year, month
         self.station_fn = "stations.json"
 
@@ -49,7 +51,7 @@ class Downloader:
         """
         Writes the data to a file.
         """
-        with open(self.output_path / filename, "w") as file:
+        with open(self.raw_data_path / filename, "w") as file:
             file.write(data)
 
     @abstractmethod
@@ -67,8 +69,7 @@ class Downloader:
         """
         pass
 
-    
-    def run(self):
+    def download(self):
         """
         Downloads the data for the given stations.
         """

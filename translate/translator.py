@@ -12,10 +12,10 @@ class Translator:
     Translates data from raw to intermediate format, and intermediate to netcdf 
     (Melodies-Monet ready) format.
     """
-    def __init__(self, input_path, output_path, **kwargs):
-        self.input_path = Path(input_path)
-        self.intermediate_path = kwargs["intermediate_path"] if kwargs["intermediate_path"] else self.input_path / "intermediate"
+    def __init__(self, intermediate_path, output_path, **kwargs):
+        self.intermediate_path = Path(intermediate_path)
         self.output_path = Path(output_path)
+        self.output_path.mkdir(parents=True, exist_ok=True)
 
         #TODO: move info to a config file
         self.file_info = {
