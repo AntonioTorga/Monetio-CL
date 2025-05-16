@@ -1,22 +1,27 @@
-from downloader import Downloader
+from .downloader import Downloader
 from pathlib import Path
+from utils.config import Config
 
 class DMCDownloader(Downloader):
     """
     Class to download data from the DMC API.
     """
 
-    def __init__(self, mail=None, api_key=None, output_path=None):
-        super().__init__()
+    def __init__(self, start_timestamp, end_timestamp, raw_data_path, time_interval, config : Config ,  mail=None, api_key=None, output_path=None):
+        super().__init__(start_timestamp, end_timestamp, raw_data_path, time_interval)
+        self.config = config
+        self.config.observation = "dmc"
+
         self.user["mail"] = mail
         self.user["api_key"] = api_key
 
         self.data_type = "Met"
 
-        self.stations_url = "https://climatologia.meteochile.gob.cl/application/servicios/getEstacionesRedEma?usuario={}&token={}"
-        self.data_url = "https://climatologia.meteochile.gob.cl/application/servicios/getDatosRecientesEma/{}/{}/{}?usuario={}&token={}"
+        self.stations_url = self.config.get_station_url()
+        self.data_url = self.config.get_data_url()
         
-        self.output_path = Path(output_path) if output_path else Path.cwd() / "raw_data"
+
+        self.output_path = Path(output_path) if output_path else Path.cwd() / self.config.defaults["output"]["path"]
         self.output_path.mkdir(parents=True, exist_ok=True)
 
     def filter_by_timestamps_required(self, data):

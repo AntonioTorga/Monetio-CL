@@ -4,8 +4,8 @@ class DMCTranslator(Translator):
     """
     DMC Translator class for translating DMC data to netcdf format.
     """
-    def __init__(self, input_path, output_path, station_file_name):
-        super().__init__(input_path, output_path, station_file_name, r"ID-(\d+)--(Met|Cal).csv")
+    def __init__(self, input_path, output_path):
+        super().__init__(input_path, output_path)
 
     def raw_to_intermediate_file(self, files, filename=None, save=False):
         """

@@ -3,29 +3,32 @@ from abc import abstractmethod
 from pathlib import Path
 from datetime import datetime
 from dateutil import parser
+from utils.config import Config
 
 class Downloader:
-    def __init__(self, start_timestamp, end_timestamp, raw_data_path, time_interval):
+    def __init__(self, start_timestamp, end_timestamp, time_interval, config : Config, raw_data_path = None, intermediate_data_path = None):
         """
         Downloader class to download data from the API.
         """
-        self.user = {
-            "user" : None,
-            "password" : None,
-            "api_key" : None,
-            "mail" : None
-        }
+        self.config = config
         self.data_type = None
         
-        self.raw_data_path = Path(raw_data_path)
-        if not self.raw_data_path.is_absolute():
+        self.raw_data_path = raw_data_path if raw_data_path else Path.cwd() / self.config.defaults["raw"]["path"]
+
+        if self.raw_data_path and not self.raw_data_path.is_absolute():
             self.raw_data_path = Path.cwd() / self.raw_data_path
+            
         self.raw_data_path.mkdir(parents=True, exist_ok=True)
+
         self.data_fn_format = "{0}-{1}-{2}-{3}.json" # station, type, year, month
         self.station_fn = "stations.json"
 
-        self.start_dt = parser.parse(start_timestamp)
-        self.end_dt = parser.parse(end_timestamp)
+        parser_info= parser.parserinfo(dayfirst=True)
+        self.start_dt = parser.parse(start_timestamp, parserinfo=parser_info)
+        self.end_dt = parser.parse(end_timestamp, parserinfo=parser_info)
+        if self.start_dt > self.end_dt:
+            raise ValueError("Start date must be before end date")
+        
         self.time_interval = time_interval
 
         self.timestamps = None

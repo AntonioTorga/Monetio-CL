@@ -10,6 +10,8 @@ setup(
                     "dask",
                     "xarray",
                     "pyarrow",
+                    "httpx",
+                    
                       ],
     entry_points={
         "console_scripts": [

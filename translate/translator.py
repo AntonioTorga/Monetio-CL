@@ -3,6 +3,7 @@ from pathlib import Path
 from dask import dataframe as dd
 from dask.diagnostics import ProgressBar
 import xarray as xr
+import numpy as np
 import re
 import json
 
@@ -16,22 +17,23 @@ class Translator:
         self.intermediate_path = Path(intermediate_path)
         self.output_path = Path(output_path)
         self.output_path.mkdir(parents=True, exist_ok=True)
+        self.verbose = kwargs["verbose"] if kwargs.get("verbose") else False
 
         #TODO: move info to a config file
         self.file_info = {
             "input_file" : {
-                "regex": kwargs["input_file_regex"] if kwargs["input_file_regex"] else "(\d*)-(Met|Cal)-(\d*)-(\d*).json", # IDStation-Type-Year-Month
+                "regex": kwargs["input_file_regex"] if kwargs.get("input_file_regex") else "(\\d*)-(Met|Cal)-(\\d*)-(\\d*).json", # IDStation-Type-Year-Month
                 },
             "intermediate_file" : {
-                "regex":  "(\d+)--(.*)\.csv", # IDStation-Type
+                "regex":  "(\\d+)--(.*)\\.csv", # IDStation-Type
                 "format": "{0}--{1}.csv", # IDStation-Type
                 },
             "output_file" : {
-                "format": kwargs["output_file_format"] if kwargs["output_file_format"] else "{0}--{1}.nc", # Network-Type
+                "format": kwargs["output_file_format"] if kwargs.get("output_file_format") else "{0}--{1}.nc", # Network-Type
                 },
             "station_file" : {
-                "raw_regex" : kwargs["station_file_name"]+".json" if kwargs["station_file_name"] else "stations.json",
-                "intermediate_regex" : kwargs["station_file_name"]+".csv" if kwargs["station_file_name"] else "stations.csv",
+                "raw_regex" : kwargs["station_file_name"]+".json" if kwargs.get("station_file_name") else "stations.json",
+                "intermediate_regex" : kwargs["station_file_name"]+".csv" if kwargs.get("station_file_name") else "stations.csv",
             }
         }
 
@@ -48,17 +50,14 @@ class Translator:
         Loads the intermediate data from the intermediate path.
         Assumes all the data must be merged into a single dataframe.
         """
-       # files = [f for f in Path(self.intermediate_path).iterdir() if f.is_file() and re.search(self.file_info["intermediate_file"]["regex"], f.name)]        
         data = {}
         for f in Path(self.intermediate_path).iterdir():
             match = re.search(self.file_info["intermediate_file"]["regex"], f.name)
             if f.is_file() and match:
                 # get the station id and type from the filename
-                station_id = match.group(1)
-                station_type = match.group(2)
-                data[station_id] = {
-                    "station_id": station_id,
-                    "station_type": station_type,
+                site_id = int(match.group(1))
+                data[site_id] = {
+                    "site_id": site_id,
                     "file": f, 
                     "data": dd.read_csv(f, sep=",", decimal=".")
                 }
@@ -66,43 +65,106 @@ class Translator:
         station_df = dd.read_csv(self.intermediate_path / self.file_info["station_file"]["intermediate_regex"], sep=",", decimal=".")
 
         return data, station_df
+    
+    def preprocess_intermediate_data(self, ddf, time_name):
+        rename = {time_name:"time"}
+        for col in ddf.columns:
+            rename[col] = col.replace("/", "|")
 
-    def intermediate_to_xarray(self, data, station_df):
+        ddf = ddf.rename(columns = rename)
+        ddf = ddf.dropna(subset=["time"])
+        ddf = ddf.drop_duplicate(subset=["time"])
+        ddf = ddf.set_index("time", sorted=True)
+        return ddf
+
+    def create_data_vars_dict(self, data_df, timestamps, columns):
+        data_vars = {}
+        for col in columns:
+            data_vars[col] =  (["x","time"], [])
+            for i, df in enumerate(data_df):
+                if col in df.columns.to_list():
+                    data_vars[col][1].append(df[col].to_numpy())
+                else: 
+                    data_vars[col][1].append(np.full(len(timestamps), np.nan))
+        return data_vars
+        
+
+
+
+    def intermediate_to_xarray(self, data, station_df, lat_name, lon_name, time_name, id_name, save=True):
         """
         Converts the intermediate data to xarray format.
         ddfs: list of dask dataframes for each station.
         """
-        ddf = dd.from_dict({}, npartitions=10)
+        # intermediate_path
+        # station_filename
+        # filename_regex
+        # output_path
 
-        for station_id, info in data.items():
-            ddf_ = info["data"]
-            ddf_["siteid"] = station_id
-            station_data = station_df.loc[station_id, ["latitud", "longitud", "altura"]].compute()
-            ddf_["latitude"] = station_data["latitud"].iloc[0]
-            ddf_["longitude"] = station_data["longitud"].iloc[0]
-            ddf_["elevation"] = station_data["altitud"].iloc[0]
-            ddf_ = ddf_.rename(columns={"momento": "time"})
-            # cast all columns to string
-            ddf_ = ddf_.astype(str)
+        data_dd = []
+        site_id_dim = []
+        lat_dim = []
+        lon_dim = []
+        timestamps = set()
+        columns = set()
 
-            ddf = ddf.merge(ddf_, how="outer")
+        for data_dict in data:
+            site_id = data_dict["site_id"]
+            _ddf = data_dict["data"]
+            file = data_dict["file"]
+            lat, lon = list(station_df.loc[site_id].compute()[[lat_name,lon_name]].iloc[0])
+
+            _ddf = self.preprocess_intermediate_data(_ddf, time_name)
+            # Dask dataframe is now correctly indexed and in a regular format.
+            data_dd.append(_ddf)
+            site_id_dim.append(site_id)
+            lat_dim.append(lat)
+            lon_dim.append(lon)
+
+            columns.update(_ddf.columns.to_list())
+            timestamps.update(_ddf.index.compute().to_list())
             
-        # TODO: fix this part, doesn't work with dask dataframe
-        ds = (ddf.set_index(["siteid", "time"])
-            .to_xarray()
-            .swap_dims(siteid="x")
-            .set_coords(["latitude", "longitude", "elevation"]) #elevation might be extra
-            .assign(x=range(ddf["siteid"].nunique()))
-            .expand_dims("y")
-            .transpose("time", "y", "x")
-        )
+            if self.verbose:
+                print(f"File {file.name}.csv processed.")
+        
+        timestamps = sorted(list(timestamps))
 
-        return ds
-    
+        if self.verbose:
+            print(f"Computing dask dataframes into pandas dataframes.")
+        data_df = [ddf.compute().reindex(timestamps, fill_value=np.nan) for ddf in data]
+        
+        data_vars = self.create_data_vars_dict(data_df, timestamps, columns)
+        if self.verbose:
+            print("Creating xarray dataset...")
+        
+        xrds = xr.Dataset(
+                data_vars,
+                coords = {
+                    "time": ("time", timestamps),
+                    "site_id": ("x", site_id_dim),
+                    "latitude": ("x", lat_dim),
+                    "longitude": ("x", lon_dim),
+                    "x": ("x", np.arange(len(site_id_dim)))
+                },
+        ).expand_dims('y').set_coords(["site_id", "latitude", "longitude"]).transpose("time","y","x")
+
+        if self.verbose:
+            print("Quick result inspection: ")
+            print(xrds)
+        
+        if save:
+            self.xarray_to_netcdf(xrds)
+        
+        return xrds
+
     def xarray_to_netcdf(self, xarray):
             """
             Save the xarray dataset to netcdf format in the output path.
             """
+            file_path = self.output_path / (self.output_fn+".nc")
+            if self.verbose:
+                print(f"Writing to resulting netcdf dataset to {file_path}")
+
             if self.output_path.is_dir() == False:
                 self.output_path.mkdir(parents=True, exist_ok=True)
 
