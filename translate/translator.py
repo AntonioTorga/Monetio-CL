@@ -13,11 +13,11 @@ class Translator:
     Translates data from raw to intermediate format, and intermediate to netcdf 
     (Melodies-Monet ready) format.
     """
-    def __init__(self, intermediate_path, output_path, **kwargs):
+    def __init__(self, intermediate_path, output_path, verbose=False,**kwargs):
         self.intermediate_path = Path(intermediate_path)
         self.output_path = Path(output_path)
         self.output_path.mkdir(parents=True, exist_ok=True)
-        self.verbose = kwargs["verbose"] if kwargs.get("verbose") else False
+        self.verbose = verbose
 
         #TODO: move info to a config file
         self.file_info = {
@@ -45,7 +45,7 @@ class Translator:
     def raw_to_intermediate_station_format(self):
         pass
     
-    def load_intermediate_data(self):
+    def load_intermediate_data(self, time_name, id_name, lat_name, lon_name):
         """
         Loads the intermediate data from the intermediate path.
         Assumes all the data must be merged into a single dataframe.
@@ -56,15 +56,23 @@ class Translator:
             if f.is_file() and match:
                 # get the station id and type from the filename
                 site_id = int(match.group(1))
+                ddf = dd.read_csv(f, sep=",", decimal=".")
+                ddf = self.preprocess_intermediate_data(ddf, time_name)
                 data[site_id] = {
                     "site_id": site_id,
                     "file": f, 
-                    "data": dd.read_csv(f, sep=",", decimal=".")
+                    "data": ddf
                 }
         
-        station_df = dd.read_csv(self.intermediate_path / self.file_info["station_file"]["intermediate_regex"], sep=",", decimal=".")
+        station_ddf = dd.read_csv(self.intermediate_path / self.file_info["station_file"]["intermediate_regex"], sep=",", decimal=".")
+        station_ddf = self.preprocess_intermediate_station_data(station_ddf, id_name, lat_name, lon_name)
 
-        return data, station_df
+        return data, station_ddf
+    
+    def preprocess_intermediate_station_data(self, station_ddf, id_name, lat_name, lon_name):
+        station_ddf = station_ddf.rename(columns={id_name: "site_id", lat_name:"latitude", lon_name:"longitude"})
+        station_ddf = station_ddf.set_index("site_id", sorted=True)
+        return station_ddf
     
     def preprocess_intermediate_data(self, ddf, time_name):
         rename = {time_name:"time"}
@@ -75,6 +83,7 @@ class Translator:
         ddf = ddf.dropna(subset=["time"])
         ddf = ddf.drop_duplicate(subset=["time"])
         ddf = ddf.set_index("time", sorted=True)
+
         return ddf
 
     def create_data_vars_dict(self, data_df, timestamps, columns):
@@ -87,20 +96,12 @@ class Translator:
                 else: 
                     data_vars[col][1].append(np.full(len(timestamps), np.nan))
         return data_vars
-        
-
-
-
-    def intermediate_to_xarray(self, data, station_df, lat_name, lon_name, time_name, id_name, save=True):
+    
+    def intermediate_to_xarray(self, data, station_ddf):
         """
         Converts the intermediate data to xarray format.
         ddfs: list of dask dataframes for each station.
         """
-        # intermediate_path
-        # station_filename
-        # filename_regex
-        # output_path
-
         data_dd = []
         site_id_dim = []
         lat_dim = []
@@ -112,9 +113,8 @@ class Translator:
             site_id = data_dict["site_id"]
             _ddf = data_dict["data"]
             file = data_dict["file"]
-            lat, lon = list(station_df.loc[site_id].compute()[[lat_name,lon_name]].iloc[0])
+            lat, lon = list(station_ddf.loc[site_id].compute()[["latitude","longitude"]].iloc[0])
 
-            _ddf = self.preprocess_intermediate_data(_ddf, time_name)
             # Dask dataframe is now correctly indexed and in a regular format.
             data_dd.append(_ddf)
             site_id_dim.append(site_id)
@@ -151,9 +151,6 @@ class Translator:
         if self.verbose:
             print("Quick result inspection: ")
             print(xrds)
-        
-        if save:
-            self.xarray_to_netcdf(xrds)
         
         return xrds
 
@@ -214,12 +211,12 @@ class Translator:
         
         return ddfs, station_ddf
     
-    def from_intermediate_to_netcdf(self):
+    def from_intermediate_to_netcdf(self, time_name, id_name, lat_name, lon_name):
         """
         Converts the intermediate data to netcdf format.
         """
-        ddfs, station_df = self.load_intermediate_data()
-        xarray = self.intermediate_to_xarray(ddfs, station_df)
+        data, station_ddf = self.load_intermediate_data(time_name, id_name, lat_name, lon_name)
+        xarray = self.intermediate_to_xarray(data, station_ddf)
         self.xarray_to_netcdf(xarray)
 
     def from_raw_to_netcdf(self, save=False):
