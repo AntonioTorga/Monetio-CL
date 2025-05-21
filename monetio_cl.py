@@ -39,7 +39,8 @@ app = typer.Typer(name="Monetio-CL", help="Monetio Command Line Interface")
 def process_intermediate_data(intermediate_path:str = typer.Option(r".\intermediate_data", "--intermediate-path", "-i"),
                               station_filename:str = typer.Option("station", "--station-filename", "-s"),
                               filename_regex:str = typer.Option(r"(\d+).csv", "--filename-regex", "-r"),
-                              output_path: str = typer.Option(r".\MM_data", "--output-path", "-o"),
+                              output_path: str = typer.Option(r".\MM_data", "--output-path"),
+                              output_name: str= typer.Option(r"data_in_nc.nc", "--output-name"),
                               lat_name: str = typer.Option("Latitud", "--lat-name"),
                               lon_name: str = typer.Option("Longitud", "--lon-name"),
                               time_name: str= typer.Option("timestamp", "--time-name"),
@@ -63,7 +64,7 @@ def process_intermediate_data(intermediate_path:str = typer.Option(r".\intermedi
         except:
             raise SystemError(f"Couldn't create directory in {Path(output_path)}")
 
-    translator = Translator(intermediate_path, output_path, verbose=verbose, intermediate_filename_regex = filename_regex)
+    translator = Translator(intermediate_path, output_path, verbose=verbose, intermediate_filename_regex = filename_regex, station_filename = station_filename, output_name = output_name)
 
     translator.from_intermediate_to_netcdf(time_name, id_name, lat_name, lon_name)
     

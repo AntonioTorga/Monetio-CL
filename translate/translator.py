@@ -29,11 +29,11 @@ class Translator:
                 "format": "{0}--{1}.csv", # IDStation-Type
                 },
             "output_file" : {
-                "format": kwargs["output_file_format"] if kwargs.get("output_file_format") else "{0}--{1}.nc", # Network-Type
+                "format": kwargs["output_name"] if kwargs.get("output_name") else "noname_nc_data.nc", # Network-Type
                 },
             "station_file" : {
-                "raw_regex" : kwargs["station_file_name"]+".json" if kwargs.get("station_file_name") else "stations.json",
-                "intermediate_regex" : kwargs["station_file_name"]+".csv" if kwargs.get("station_file_name") else "stations.csv",
+                "raw_regex" : kwargs["raw_station_filename"]+".json" if kwargs.get("raw_station_filename") else "stations.json",
+                "intermediate_regex" : kwargs["station_filename"]+".csv" if kwargs.get("station_filename") else "stations.csv",
             }
         }
 
@@ -52,18 +52,20 @@ class Translator:
         """
         data = {}
         for f in Path(self.intermediate_path).iterdir():
-            match = re.search(self.file_info["intermediate_file"]["regex"], f.name)
+            match = re.search(self.file_info["intermediate_file"]["regex"], f.name)            
             if f.is_file() and match:
                 # get the station id and type from the filename
                 site_id = int(match.group(1))
                 ddf = dd.read_csv(f, sep=",", decimal=".")
-                ddf = self.preprocess_intermediate_data(ddf, time_name, site_id)
+                try:
+                    ddf = self.preprocess_intermediate_data(ddf, time_name, site_id)
+                except ValueError as e:
+                    continue
                 data[site_id] = {
                     "site_id": site_id,
                     "file": f, 
                     "data": ddf
                 }
-        
         station_ddf = dd.read_csv(self.intermediate_path / self.file_info["station_file"]["intermediate_regex"], sep=",", decimal=".")
         station_ddf = self.preprocess_intermediate_station_data(station_ddf, id_name, lat_name, lon_name)
 
@@ -81,14 +83,15 @@ class Translator:
         if not time_name in ddf.columns:
             raise ValueError(f"No column {time_name} in file for {site_id} site.")
         rename = {time_name:"time"}
-        cols = ddf.columns.to_list().remove(time_name) 
-
+        cols = ddf.columns.to_list() 
+        cols.remove(time_name)
         if cols:
             for col in cols:
-                rename[col] = col.replace("/", "|")
+                pos_replacement = col.replace("/", "|")
+                if col != pos_replacement:
+                    rename[col] = pos_replacement
                 if ddf[col].dtype not in ["float64", "int64", "int32", "float32"]:
                         ddf[col] = ddf[col].apply(to_float, meta=float)
-
         ddf = ddf.rename(columns = rename)
         ddf = ddf.dropna(subset=["time"])
         ddf = ddf.drop_duplicates(subset=["time"])
@@ -122,7 +125,13 @@ class Translator:
         for site_id, data_dict in data.items():
             _ddf = data_dict["data"]
             file = data_dict["file"]
-            lat, lon = list(station_ddf.loc[site_id].compute()[["latitude","longitude"]].iloc[0])
+            try:
+                id_row = station_ddf.loc[site_id].compute()
+            except KeyError: 
+                if self.verbose:
+                    print(f"No row matching the id {site_id} in station file info.")
+                continue
+            lat, lon = list(id_row[["latitude","longitude"]].iloc[0])
 
             # Dask dataframe is now correctly indexed and in a regular format.
             data_dd.append(_ddf)
@@ -155,7 +164,8 @@ class Translator:
                     "longitude": ("x", lon_dim),
                     "x": ("x", np.arange(len(site_id_dim)))
                 },
-        ).expand_dims('y').set_coords(["site_id", "latitude", "longitude"]).transpose("time","y","x")
+        ).expand_dims("y").set_coords(["site_id", "latitude", "longitude"])
+        xrds = xrds.transpose("time","y","x")
 
         if self.verbose:
             print("Quick result inspection: ")
@@ -167,14 +177,14 @@ class Translator:
             """
             Save the xarray dataset to netcdf format in the output path.
             """
-            file_path = self.output_path / (self.output_fn+".nc")
+            file_path = self.output_path / (self.file_info["output_file"]["format"])
             if self.verbose:
                 print(f"Writing to resulting netcdf dataset to {file_path}")
 
             if self.output_path.is_dir() == False:
                 self.output_path.mkdir(parents=True, exist_ok=True)
 
-            xarray.to_netcdf(self.output_path / (self.output_fn+".nc"), format="NETCDF4", unlimited_dims="time" )
+            xarray.to_netcdf(file_path, format="NETCDF4", unlimited_dims="time" )
 
     def from_raw_to_intermediate_format(self, save=False):
         """
