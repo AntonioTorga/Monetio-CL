@@ -6,7 +6,7 @@ import xarray as xr
 import numpy as np
 import re
 import json
-
+from utils.utils import to_float
 
 class Translator:
     """
@@ -25,7 +25,7 @@ class Translator:
                 "regex": kwargs["input_file_regex"] if kwargs.get("input_file_regex") else "(\\d*)-(Met|Cal)-(\\d*)-(\\d*).json", # IDStation-Type-Year-Month
                 },
             "intermediate_file" : {
-                "regex":  "(\\d+)--(.*)\\.csv", # IDStation-Type
+                "regex": kwargs.get("intermediate_filename_regex") if kwargs.get("intermediate_filename_regex") else r"(\d+)--(.*).csv", # IDStation-Type
                 "format": "{0}--{1}.csv", # IDStation-Type
                 },
             "output_file" : {
@@ -57,7 +57,7 @@ class Translator:
                 # get the station id and type from the filename
                 site_id = int(match.group(1))
                 ddf = dd.read_csv(f, sep=",", decimal=".")
-                ddf = self.preprocess_intermediate_data(ddf, time_name)
+                ddf = self.preprocess_intermediate_data(ddf, time_name, site_id)
                 data[site_id] = {
                     "site_id": site_id,
                     "file": f, 
@@ -70,18 +70,28 @@ class Translator:
         return data, station_ddf
     
     def preprocess_intermediate_station_data(self, station_ddf, id_name, lat_name, lon_name):
+        for column in [id_name, lat_name, lon_name]:
+            if column not in station_ddf.columns:
+                raise ValueError(f"No {column} column in Station file.")
         station_ddf = station_ddf.rename(columns={id_name: "site_id", lat_name:"latitude", lon_name:"longitude"})
         station_ddf = station_ddf.set_index("site_id", sorted=True)
         return station_ddf
     
-    def preprocess_intermediate_data(self, ddf, time_name):
+    def preprocess_intermediate_data(self, ddf, time_name, site_id):
+        if not time_name in ddf.columns:
+            raise ValueError(f"No column {time_name} in file for {site_id} site.")
         rename = {time_name:"time"}
-        for col in ddf.columns:
-            rename[col] = col.replace("/", "|")
+        cols = ddf.columns.to_list().remove(time_name) 
+
+        if cols:
+            for col in cols:
+                rename[col] = col.replace("/", "|")
+                if ddf[col].dtype not in ["float64", "int64", "int32", "float32"]:
+                        ddf[col] = ddf[col].apply(to_float, meta=float)
 
         ddf = ddf.rename(columns = rename)
         ddf = ddf.dropna(subset=["time"])
-        ddf = ddf.drop_duplicate(subset=["time"])
+        ddf = ddf.drop_duplicates(subset=["time"])
         ddf = ddf.set_index("time", sorted=True)
 
         return ddf
@@ -109,8 +119,7 @@ class Translator:
         timestamps = set()
         columns = set()
 
-        for data_dict in data:
-            site_id = data_dict["site_id"]
+        for site_id, data_dict in data.items():
             _ddf = data_dict["data"]
             file = data_dict["file"]
             lat, lon = list(station_ddf.loc[site_id].compute()[["latitude","longitude"]].iloc[0])
@@ -125,13 +134,13 @@ class Translator:
             timestamps.update(_ddf.index.compute().to_list())
             
             if self.verbose:
-                print(f"File {file.name}.csv processed.")
+                print(f"File {file.name} processed.")
         
         timestamps = sorted(list(timestamps))
 
         if self.verbose:
             print(f"Computing dask dataframes into pandas dataframes.")
-        data_df = [ddf.compute().reindex(timestamps, fill_value=np.nan) for ddf in data]
+        data_df = [ddf.compute().reindex(timestamps, fill_value=np.nan) for ddf in data_dd]
         
         data_vars = self.create_data_vars_dict(data_df, timestamps, columns)
         if self.verbose:

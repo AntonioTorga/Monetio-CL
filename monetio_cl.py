@@ -36,15 +36,15 @@ app = typer.Typer(name="Monetio-CL", help="Monetio Command Line Interface")
 
 
 @app.command()
-def process_intermediate_data(intermediate_path:str= typer.Option("/inter_data", "--intermediate-path", "-i"),
-                              station_filename:str = typer.Option("stations", "--station-filename, -s"),
-                              filename_regex:str = typer.Option(r"(\d+).csv", "--filename-regex", "r"),
-                              output_path: str = typer.Option("/MM_data", "--output-path", "-o"),
-                              lat_name: str = typer.Option("Latitud", "--lat_name"),
-                              lon_name: str = typer.Option("Longitud", "--lon_name"),
-                              time_name: str= typer.Option("timestamp", "--time_name"),
-                              id_name: str= typer.Option("ID-Stored", "--id_name"),
-                              verbose:str=typer.Option(False, "--verbosity", "-v")
+def process_intermediate_data(intermediate_path:str = typer.Option(r".\intermediate_data", "--intermediate-path", "-i"),
+                              station_filename:str = typer.Option("station", "--station-filename", "-s"),
+                              filename_regex:str = typer.Option(r"(\d+).csv", "--filename-regex", "-r"),
+                              output_path: str = typer.Option(r".\MM_data", "--output-path", "-o"),
+                              lat_name: str = typer.Option("Latitud", "--lat-name"),
+                              lon_name: str = typer.Option("Longitud", "--lon-name"),
+                              time_name: str= typer.Option("timestamp", "--time-name"),
+                              id_name: str= typer.Option("ID-Stored", "--id-name"),
+                              verbose: bool=typer.Option(False, "--verbosity", "-v")
                               ):
     """
     Process a batch of data located in intermediate_path, that is in intermediate format.
@@ -62,13 +62,10 @@ def process_intermediate_data(intermediate_path:str= typer.Option("/inter_data",
             os.makedirs(Path(output_path))
         except:
             raise SystemError(f"Couldn't create directory in {Path(output_path)}")
-    
-    #check id, time, lat and lon names are actually in the files.
 
-    translator = Translator(intermediate_path, output_path, verbose=verbose)
+    translator = Translator(intermediate_path, output_path, verbose=verbose, intermediate_filename_regex = filename_regex)
 
     translator.from_intermediate_to_netcdf(time_name, id_name, lat_name, lon_name)
     
-                        
 if __name__ == "__main__":
     app()
