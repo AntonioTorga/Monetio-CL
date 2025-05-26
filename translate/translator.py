@@ -17,6 +17,7 @@ class Translator:
         self.intermediate_path = Path(intermediate_path)
         self.output_path = Path(output_path)
         self.output_path.mkdir(parents=True, exist_ok=True)
+        self.timestep = kwargs.get("timestep")
         self.verbose = verbose
 
         #TODO: move info to a config file
@@ -95,9 +96,20 @@ class Translator:
         ddf = ddf.rename(columns = rename)
         ddf = ddf.dropna(subset=["time"])
         ddf = ddf.drop_duplicates(subset=["time"])
+        ddf['time']= dd.to_datetime(ddf.time)
         ddf = ddf.set_index("time", sorted=True)
 
         return ddf
+    
+    def postprocess_xarray_data(self, xrds, time_interval):
+        dict_intervals = {
+            "H":"1h",
+            "D":"1D",
+            "M":"1M",
+            "Y":"1Y"
+        }
+        xrds = xrds.resample(time=dict_intervals[time_interval]).mean()        
+        return xrds
 
     def create_data_vars_dict(self, data_df, timestamps, columns):
         data_vars = {}
@@ -166,6 +178,11 @@ class Translator:
                 },
         ).expand_dims("y").set_coords(["site_id", "latitude", "longitude"])
         xrds = xrds.transpose("time","y","x")
+
+        if self.timestep:
+            if self.verbose:
+                print("Postprocessing... changing to correct timestep.")
+            xrds = self.postprocess_xarray_data(xrds, self.timestep)
 
         if self.verbose:
             print("Quick result inspection: ")

@@ -1,10 +1,10 @@
 **/__pycache__/
 /venv/
 /*.egg-info/
-test.py
-test2.py
+test*.py
 *.json
 /data
 /raw_data
 /data_nc
 /MM_data
+/all_data

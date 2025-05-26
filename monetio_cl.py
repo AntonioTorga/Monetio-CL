@@ -45,6 +45,7 @@ def process_intermediate_data(intermediate_path:str = typer.Option(r".\intermedi
                               lon_name: str = typer.Option("Longitud", "--lon-name"),
                               time_name: str= typer.Option("timestamp", "--time-name"),
                               id_name: str= typer.Option("ID-Stored", "--id-name"),
+                              timestep: str = typer.Option(Timestep.H, "--timestep", "-t"),
                               verbose: bool=typer.Option(False, "--verbosity", "-v")
                               ):
     """
@@ -64,7 +65,7 @@ def process_intermediate_data(intermediate_path:str = typer.Option(r".\intermedi
         except:
             raise SystemError(f"Couldn't create directory in {Path(output_path)}")
 
-    translator = Translator(intermediate_path, output_path, verbose=verbose, intermediate_filename_regex = filename_regex, station_filename = station_filename, output_name = output_name)
+    translator = Translator(intermediate_path, output_path, verbose=verbose, intermediate_filename_regex = filename_regex, station_filename = station_filename, output_name = output_name, timestep = timestep)
 
     translator.from_intermediate_to_netcdf(time_name, id_name, lat_name, lon_name)
     
