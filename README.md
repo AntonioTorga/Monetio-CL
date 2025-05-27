@@ -9,12 +9,12 @@ En este momento Monetio-CL procesa los datos de la red en formato "intermedio" (
 
 ## Instalación
 Para instalar debe clonar este repositorio y ejecutar dentro de un ambiente virtual
-´´´
+```
 pip install -e .
-´´´
+```
 ## Uso
 La interfaz de comandos puede ser accedida desde la terminal escribiendo Monetio-CL.
 Para obtener más información de su uso ejecute:
-´´´
+```
 Monetio-CL --help
-´´´
+```
