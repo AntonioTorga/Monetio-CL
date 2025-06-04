@@ -171,12 +171,12 @@ class Translator:
                 data_vars,
                 coords = {
                     "time": ("time", timestamps),
-                    "site_id": ("x", site_id_dim),
+                    "siteid": ("x", site_id_dim),
                     "latitude": ("x", lat_dim),
                     "longitude": ("x", lon_dim),
                     "x": ("x", np.arange(len(site_id_dim)))
                 },
-        ).expand_dims("y").set_coords(["site_id", "latitude", "longitude"])
+        ).expand_dims("y").set_coords(["siteid", "latitude", "longitude"])
         xrds = xrds.transpose("time","y","x")
 
         if self.timestep:
