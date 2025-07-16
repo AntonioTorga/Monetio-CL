@@ -2,61 +2,35 @@ import httpx
 from abc import abstractmethod
 from pathlib import Path
 from datetime import datetime
-from dateutil import parser
-from utils.config import Config
+from utils.utils import url_creator, get_timestamps
+from functools import partial
+from translate.translator import Translator
+import json
+
 
 class Downloader:
-    def __init__(self, start_timestamp, end_timestamp, time_interval, config : Config, raw_data_path = None, intermediate_data_path = None):
+    def __init__(self, data_url, stations_url, raw_path, **kwargs):
         """
-        Downloader class to download data from the API.
+        Downloads data and turns it into intermediate format
         """
-        self.config = config
-        self.data_type = None
+        self.raw_path = raw_path
+
+        self.station_data = None
+        self.data = None
+
+        self.station_file = raw_path / "stations.json"
+        self.data_file_format = "{site_id}-{year}-{month}.json"
         
-        self.raw_data_path = raw_data_path if raw_data_path else Path.cwd() / self.config.defaults["raw"]["path"]
+        self.stations_url = stations_url
+        # In format: https(...)/{year}/{month}/{day}/{hour}/{other_info}
+        # order not important, and the other info must be provided in a json string
+        self.data_url = data_url
 
-        if self.raw_data_path and not self.raw_data_path.is_absolute():
-            self.raw_data_path = Path.cwd() / self.raw_data_path
-            
-        self.raw_data_path.mkdir(parents=True, exist_ok=True)
-
-        self.data_fn_format = "{0}-{1}-{2}-{3}.json" # station, type, year, month
-        self.station_fn = "stations.json"
-
-        parser_info= parser.parserinfo(dayfirst=True)
-        self.start_dt = parser.parse(start_timestamp, parserinfo=parser_info)
-        self.end_dt = parser.parse(end_timestamp, parserinfo=parser_info)
-        if self.start_dt > self.end_dt:
-            raise ValueError("Start date must be before end date")
-        
-        self.time_interval = time_interval
-
-        self.timestamps = None
-        self.station_ids = []
-
-        self.stations_url = None
-        self.data_url = None
-                          
         self.client = httpx.Client()
-
-    def get_timestamps(self):
-        """
-        Returns the timestamps for every moment in the time interval
-        with the right timestep and format
-        """
-
-        import pandas as pd
-        timestamps = pd.date_range(start=self.start_dt, end=self.end_dt, freq=self.time_interval).to_list()
-        timestamps = [dt.strftime("%Y-%m-%d %H:%M:%S") for dt in timestamps]
-        self.timestamps = timestamps
-
-    def write_to_file(self, data, filename):
-        """
-        Writes the data to a file.
-        """
-        with open(self.raw_data_path / filename, "w") as file:
-            file.write(data)
-
+        self.other_data = kwargs.get("other_data", {})
+        verbose = kwargs.get("verbose", False)
+    
+    # just get the stations data in {siteid: station_data} where station_data is a dict from json
     @abstractmethod
     def _get_stations_data(self):
 
@@ -64,19 +38,47 @@ class Downloader:
         Downloads the data for the given stations.
         """
         pass
-
+    
+    # for a list in [{url, info}] format transform into [{info, data}] | data in dictionary from json
     @abstractmethod
-    def _get_data(self):
+    def _get_data_for_station(self, urls):
         """
         Downloads the data for the given stations.
         """
         pass
 
-    def download(self):
+    # Returns data in {siteid:[{info,data}]} format and stations in {siteid:station_data} format
+    def _get_data(self,start,end):
+        # stations_data: {siteid: ddf}
+        stations = self._get_stations_data()
+        timestamps = get_timestamps(start,end,time_interval="h")
+
+        # data: {siteid: [{info, data}]}
+        data = dict()
+        # assumption: assuming that data will be available for each site separately and not altogether
+        # might need to move this part to an abstract method
+        for station in stations.keys():
+            #station_urls [{urls, info}]
+            station_urls = url_creator(self.data_url, timestamps, station, other_data=self.other_data)
+            station_data = self._get_data_for_station(station_urls)
+            data.update({station:station_data})
+
+        return data, stations
+    
+    #saves the raw data to file
+    def _save(self, data):
+        for siteid, dictionary in data.items():
+            filepath =  self.raw_path/ (self.data_file_format.format(**dictionary["info"]))
+            with open(filepath, "w") as fp:
+                json.dump(dictionary["data"], fp)          
+    
+    def download(self, start, end, save=False):
         """
         Downloads the data for the given stations.
         """
-        self.get_timestamps()
+        data, stations = self._get_data(start, end)
 
-        stations_data = self._get_stations_data()
-        data = self._get_data()
+        if save:
+            self._save(data)
+        
+        return data, stations
