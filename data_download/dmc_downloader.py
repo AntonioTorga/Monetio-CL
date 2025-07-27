@@ -1,7 +1,7 @@
 from .downloader import Downloader
 from pathlib import Path
 from utils.config import Config
-import json
+from json import JSONDecodeError
 import asyncio
 import httpx
 
@@ -9,19 +9,28 @@ async def fetch_all_data(urls):
     async with httpx.AsyncClient() as client:
         tasks = [client.get(url) for url in urls]
         responses = await asyncio.gather(*tasks)
-        return [response.json() for response in responses]
-
+        processed_responses = []
+        for response in responses:
+            try: 
+                x = response.json()
+            except JSONDecodeError: 
+                x= None
+            processed_responses.append(x)
+        return processed_responses
         
 class DMCDownloader(Downloader):
-    def __init__(self, data_url, stations_url, raw_path, **kwargs):
+    def __init__(self, raw_path=None, **kwargs):
+        data_url = r"https://climatologia.meteochile.gob.cl/application/servicios/getDatosRecientesEma/{siteid}/{year}/{month}?usuario={user}&token={api_key}"
+        stations_url = r"https://climatologia.meteochile.gob.cl/application/servicios/getEstacionesRedEma?usuario={user}&token={api_key}"
         super().__init__(data_url, stations_url, raw_path, **kwargs)
+
+    def _get_station_ids(self):
+        return [station["codigoNacional"] for station in self.station_data["datosEstacion"]]
 
     def _get_stations_data(self):
         response = self.client.get(self.stations_url.format(**self.other_data))
         # TODO: manage unsuccesful response
         station_data = response.json()
-        station_data = station_data["datosEstacion"]
-        station_data = {station["codigoNacional"]:station for station in station_data}
         return station_data
     
     # for a list in [{url, info}] format transform into [{info, data}] | data in dictionary from json

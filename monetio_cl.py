@@ -1,6 +1,7 @@
+from translate.dmc_translator import DMCTranslator
 from translate.translator import Translator
-from data_download.downloader import Downloader
-from utils.utils import check_file, check_path_exists 
+from data_download.dmc_downloader import DMCDownloader
+from utils.utils import check_file, check_path_exists, to_datetime, get_timestamps
 from enum import StrEnum
 
 import typer
@@ -16,7 +17,7 @@ class Timestep(StrEnum):
     Y = "Y"  # Yearly
     N = "N"
     
-app = typer.Typer(name="Monetio-CL", help="Monetio Command Line Interface")
+app = typer.Typer(name="Monetio-CL", help="Monetio Command Line Interface", pretty_exceptions_enable=False)
 
 @app.command()
 def get_dmc(
@@ -25,29 +26,48 @@ def get_dmc(
             user: str,
             api_key: str,
             timestep: str = typer.Option(Timestep.N, "--timestep", "-t"),
+            location_attr_names: str= typer.Option(None, "--location-attribute-names", "-l"),
+            raw_path: str = typer.Option(None, "--raw_path"), 
             output_path: str = typer.Option(r".\MM_data", "--output-path"),
-            station_file:str = typer.Option("stations.csv", "--station-filename", "-s"),
-            intermediate_filename:str = typer.Option(r"{siteid}.csv", "--intermediate-filename"),
-            intermediate_regex:str = typer.Option(r"(\d+).csv", "--filename-regex"),
             output_name: str = typer.Option(r"dmc.nc", "--output-name", "-o"),
-            verbose: bool=typer.Option(False, "--verbosity", "-v"),
-            save_intermediate: bool =typer.Option(False, "--save_intermediate"),
+            verbose: bool=typer.Option(False, "--verbose", "-v"),
+            save_intermediate: bool =typer.Option(False, "--save-intermediate"),
             intermediate_path:str = typer.Option(None, "--intermediate-path", "-i"),
             ):
+    
+    if raw_path:
+        raw_path = Path(raw_path)
+        check_path_exists(raw_path, create=True)
+
     output_path = Path(output_path)
     check_path_exists(output_path, create=True)
     if save_intermediate and intermediate_path:
         intermediate_path = Path(intermediate_path)
         check_path_exists(intermediate_path, create=True)
 
-    data_url = r"https://climatologia.meteochile.gob.cl/application/servicios/getDatosRecientesEma/{siteid}/{year}/{month}?usuario={user}&token={api_key}"
-    stations_url = r"https://climatologia.meteochile.gob.cl/application/servicios/getEstacionesRedEma?usuario={user}&token={api_key}"
-    
-    #TODO: confusion con donde poner que, es necesario darle tanta libertad al usuario?
-    downloader = Downloader(data_url, stations_url, intermediate_path = intermediate_path, other_data={"user":user, "api_key":api_key})
-    translator = Translator(intermediate_path, output_path, verbose=verbose, intermediate_regex = intermediate_regex , station_filename = station_file, output_name = output_name, timestep = timestep)
+    start_time = to_datetime(start_time)
+    end_time = to_datetime(end_time)
 
-    data, station = downloader.download(start_time, end_time, save_intermediate=True)
+    timestamps = get_timestamps(start_time,end_time,time_interval=timestep)
+
+    downloader = DMCDownloader(other_data={"user":user, "api_key":api_key},
+                                verbose=verbose, raw_path=raw_path)
+    translator = DMCTranslator(intermediate_path, output_path, raw_path = raw_path,
+                               verbose=verbose, output_name = output_name, timestep = timestep)
+
+
+    #TODO: check inter path for data and move timestamp creation here, so download is independent of 
+    # time interval, and just uses timestamps.
+
+    location_attr_names = location_attr_names.split(",") if location_attr_names!=None else []
+
+    print(f"Downloading DMC data from {start_time.strftime("%d-%m-%Y")} to {end_time.strftime("%d-%m-%Y")}")
+    data, station = downloader.download(timestamps)
+    translator.from_raw_to_netcdf(data, station, time_name="momento", lat_name="latitud",
+                                   lon_name="longitud", id_name= "codigoNacional", location_attr_names=location_attr_names,
+                                   save=save_intermediate, start = start_time, end = end_time, time_interval=timestep)
+
+    return data, station
 
     
 @app.command()
@@ -59,6 +79,7 @@ def process_intermediate_data(intermediate_path:str = typer.Option(r".\intermedi
                               lat_name: str = typer.Option("Latitud", "--lat-name"),
                               lon_name: str = typer.Option("Longitud", "--lon-name"),
                               time_name: str= typer.Option("timestamp", "--time-name"),
+                              location_attr_names: str=typer.Option(None, "--location-attr-names", "-l"),
                               id_name: str= typer.Option("ID-Stored", "--id-name"),
                               timestep: str = typer.Option(Timestep.N, "--timestep", "-t"),
                               verbose: bool=typer.Option(False, "--verbosity", "-v")
@@ -75,10 +96,11 @@ def process_intermediate_data(intermediate_path:str = typer.Option(r".\intermedi
     check_path_exists(intermediate_path)
     check_path_exists(output_path, create=True)
     check_file(station_file)
+    location_attr_names = location_attr_names.split(",") if location_attr_names!=None else []
 
-    translator = Translator(intermediate_path, output_path, verbose=verbose, intermediate_filename_regex = filename_regex, station_filename = station_file, output_name = output_name, timestep = timestep)
+    translator = Translator(intermediate_path, output_path, raw_path=None, verbose=verbose, intermediate_filename_regex = filename_regex, station_filename = station_file, output_name = output_name, timestep = timestep)
 
-    translator.from_intermediate_to_netcdf(time_name, id_name, lat_name, lon_name)
-    
+    translator.from_intermediate_to_netcdf(time_name, id_name, lat_name, lon_name, location_attr_names)
+
 if __name__ == "__main__":
     app()

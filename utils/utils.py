@@ -15,14 +15,18 @@ def url_creator(url, timestamps, siteid, other_data={}):
     """
     _other_data= other_data
     _other_data.update({"siteid":siteid})
-    _format_dicts = [{"year":timestamp.year, "day":timestamp.day, "hour":timestamp.hour, "minute":timestamp.minute} for timestamp in timestamps]
-    _format_dicts = [_format_dicts.update(_other_data)]
+    _format_dicts = [{"year":timestamp.year, "month":timestamp.month, "day":timestamp.day, "hour":timestamp.hour, "minute":timestamp.minute} for timestamp in timestamps]
+    for _format_dict in _format_dicts:
+        _format_dict.update(_other_data)
     
+    check_urls = set()
     urls = []
     for format_dict in _format_dicts:
         _url = url.format(**format_dict)
-        dictionary = {"url":_url, "info":format_dict}
-        urls.append(dictionary)
+        if _url not in check_urls:
+            check_urls.add(_url)
+            dictionary = {"url":_url, "info":format_dict}
+            urls.append(dictionary)
 
     return urls
 
@@ -41,26 +45,26 @@ def check_path_exists(path, create=False):
     else:
         raise FileNotFoundError(f"Couldn't reach path {path}")
 
+def to_datetime(string:str):
+    from dateutil import parser
+
+    parser_info= parser.parserinfo(dayfirst=True)
+    return parser.parse(string, parserinfo=parser_info)
+
 def get_timestamps(start, end, time_interval):
     """
     Returns the timestamps for every moment in the time interval
     with the right timestep and format
     """
     import pandas as pd
-    from dateutil import parser
 
-    parser_info= parser.parserinfo(dayfirst=True)
-    start_dt = parser.parse(start, parserinfo=parser_info)
-    end_dt = parser.parse(end, parserinfo=parser_info)
-
-    if start_dt > end_dt:
+    if start > end:
         raise ValueError("Start date must be before end date")
 
     if time_interval=="N" or time_interval=="H":
         time_interval = "h"
 
-    timestamps = pd.date_range(start=start_dt, end=end_dt, freq=time_interval).to_list()
-    timestamps = [dt.strftime("%Y-%m-%d %H:%M:%S") for dt in timestamps]
+    timestamps = pd.date_range(start=start, end=end, freq=time_interval).to_list()
 
     return timestamps
 

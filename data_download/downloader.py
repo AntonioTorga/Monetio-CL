@@ -2,7 +2,7 @@ import httpx
 from abc import abstractmethod
 from pathlib import Path
 from datetime import datetime
-from utils.utils import url_creator, get_timestamps
+from utils.utils import url_creator
 from functools import partial
 from translate.translator import Translator
 import json
@@ -18,8 +18,8 @@ class Downloader:
         self.station_data = None
         self.data = None
 
-        self.station_file = raw_path / "stations.json"
-        self.data_file_format = "{site_id}-{year}-{month}.json"
+        self.station_file = raw_path / "stations.json" if raw_path!=None else None
+        self.data_file_format = "{siteid}-{year}-{month}.json"
         
         self.stations_url = stations_url
         # In format: https(...)/{year}/{month}/{day}/{hour}/{other_info}
@@ -28,7 +28,8 @@ class Downloader:
 
         self.client = httpx.Client()
         self.other_data = kwargs.get("other_data", {})
-        verbose = kwargs.get("verbose", False)
+        self.verbose = kwargs.get("verbose", False)
+        print(f"Verbose {self.verbose}")
     
     # just get the stations data in {siteid: station_data} where station_data is a dict from json
     @abstractmethod
@@ -47,38 +48,56 @@ class Downloader:
         """
         pass
 
-    # Returns data in {siteid:[{info,data}]} format and stations in {siteid:station_data} format
-    def _get_data(self,start,end):
-        # stations_data: {siteid: ddf}
-        stations = self._get_stations_data()
-        timestamps = get_timestamps(start,end,time_interval="h")
+    @abstractmethod
+    def _get_station_ids(self):
+        pass 
 
+    # Returns data in {siteid:[{info,data}]} format and stations in {siteid:station_data} format
+    def _get_data(self, timestamps):
+        # stations_data: {siteid: ddf}
+        self.station_data = self._get_stations_data()
+        
         # data: {siteid: [{info, data}]}
         data = dict()
         # assumption: assuming that data will be available for each site separately and not altogether
         # might need to move this part to an abstract method
-        for station in stations.keys():
+        for station in self._get_station_ids():
+            if self.verbose:
+                print(f"Fetching data for station {station}...")
             #station_urls [{urls, info}]
             station_urls = url_creator(self.data_url, timestamps, station, other_data=self.other_data)
             station_data = self._get_data_for_station(station_urls)
             data.update({station:station_data})
+    
+        self.data = data
 
-        return data, stations
+        return self.data, self.station_data
     
     #saves the raw data to file
-    def _save(self, data):
-        for siteid, dictionary in data.items():
-            filepath =  self.raw_path/ (self.data_file_format.format(**dictionary["info"]))
-            with open(filepath, "w") as fp:
-                json.dump(dictionary["data"], fp)          
+    def _save(self):
+        data = self.data
+        for siteid, data_list in data.items():
+            if self.verbose:
+                print(f"Writting to file raw data from station {siteid}...")
+            for dictionary in data_list:
+                dictionary["info"].update({"siteid":siteid})
+                filepath =  self.raw_path/ (self.data_file_format.format(**dictionary["info"]))
+                with open(filepath, "w") as fp:
+                    data_write = dictionary["data"] if dictionary["data"]!=None else {}
+                    json.dump(dictionary["data"], fp)
+        with open(self.station_file, "w") as fp:
+            json.dump(self.station_data, fp)
     
-    def download(self, start, end, save=False):
+    def download(self, timestamps=None, save=False):
         """
         Downloads the data for the given stations.
         """
-        data, stations = self._get_data(start, end)
+        if timestamps==None:
+            raise ValueError("No timestamps for download.")
+        
+        data, stations = self._get_data(timestamps)
 
         if save:
-            self._save(data)
+            self._save()
         
         return data, stations
