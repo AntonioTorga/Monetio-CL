@@ -1,6 +1,7 @@
 import numpy as np
 import re
 from pathlib import Path
+import dask.dataframe as dd
 
 
 def to_float(x):
@@ -67,6 +68,17 @@ def get_timestamps(start, end, time_interval):
     timestamps = pd.date_range(start=start, end=end, freq=time_interval).to_list()
 
     return timestamps
+
+def get_existing_timestamps(path: Path, filename_regex: str, time_name: str):
+    files = path.glob(filename_regex)
+    timestamps = set()
+    for file in files:
+        ddf = dd.read_csv(file)
+        timestamps.update(ddf[time_name].compute().to_numpy())
+        print(timestamps)
+
+    return list(timestamps)
+
 
 def create_data_vars_dict(data_df, timestamps, columns):
     data_vars = {}

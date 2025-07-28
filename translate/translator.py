@@ -244,7 +244,7 @@ class Translator:
 
             xarray.to_netcdf(file_path, format="NETCDF4", unlimited_dims="time" )
 
-    def from_raw_to_intermediate_format(self, raw_data=None, raw_station=None, save=False):
+    def from_raw_to_intermediate_format(self, raw_data=None, raw_station=None, save=False, merge=False, time_name=None):
         """
         Converts the raw data to intermediate format.
         Collects all the raw files that go into each intermediate station file.
@@ -266,6 +266,7 @@ class Translator:
 
             if save:
                 intermediate_filepath = self.intermediate_path / self.file_info["intermediate_file"]["format"].format(**{"siteid":station_id})
+                # TODO: add data completion if merge is True
                 data.to_csv(intermediate_filepath, single_file=True)
 
             ddfs[station_id] = {
@@ -292,12 +293,12 @@ class Translator:
     def from_raw_to_netcdf(self, raw_data=None, raw_station=None, time_name="momento", lat_name= "latitud",
                             lon_name="longitud", id_name="codigoNacional", location_attr_names=[],
                             start=None, end=None, time_interval= "N",
-                            save=False):
+                            save=False, merge=False):
         """
         Converts the raw data to netcdf format.
         """
         # load the data from the input path
-        ddfs, station_ddf = self.from_raw_to_intermediate_format(raw_data, raw_station, save = save)
+        ddfs, station_ddf = self.from_raw_to_intermediate_format(raw_data, raw_station, save = save, merge=merge, time_name=time_name)
         # convert the data to xarray format
 
         for site_id, ddf in ddfs.items():
