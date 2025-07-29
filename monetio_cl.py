@@ -27,25 +27,26 @@ def get_dmc(
             end_time: Annotated[datetime,typer.Argument(formats=["%Y-%m-%d", "%d-%m-%Y"])],
             user: Annotated[str,typer.Argument()],
             api_key: Annotated[str,typer.Argument()],
-            raw_path: Annotated[Path, typer.Option(exists=True, dir_okay=True, file_okay=False, resolve_path=True)], 
-            intermediate_path: Annotated[Path, typer.Option(exists=True, dir_okay=True, file_okay=False, resolve_path=True)],
-            output_path: Annotated[Path, typer.Option(exists=True, dir_okay=True, file_okay=False, resolve_path=True)],
+            # raw_path: Annotated[Path, typer.Option(exists=True, dir_okay=True, file_okay=False, resolve_path=True)] = Path("./raw_data"), 
+            intermediate_path: Annotated[Path, typer.Option(exists=True, dir_okay=True, file_okay=False, resolve_path=True)] = Path("./inter_data"),
+            output_path: Annotated[Path, typer.Option(exists=True, dir_okay=True, file_okay=False, resolve_path=True)] = Path("./output_data"),
             output_name: str = typer.Option(r"dmc.nc", "--output-name", "-o"),
             timestep: str = typer.Option(Timestep.N, "--timestep", "-t"),
             location_attr_names: str= typer.Option(None, "--location-attribute-names", "-l"),
             verbose: bool=typer.Option(False, "--verbose", "-v"),
+            cached: bool = typer.Option(False, "--cached", "-c"),
             save_intermediate: bool =typer.Option(False, "--save-intermediate"),
             ):
     
     timestamps = get_timestamps(start_time,end_time,time_interval=timestep)
 
-    if intermediate_path!=None:
-        existing_timestamps = get_existing_timestamps(intermediate_path, "{\d}.csv")
-        timestamps = timestamps - existing_timestamps
+    if intermediate_path!=None and cached:
+        existing_timestamps = get_existing_timestamps(intermediate_path, r"{\d}.csv", time_name= "momento")
+        timestamps = list(set(timestamps) - set(existing_timestamps))
     
     downloader = DMCDownloader(other_data={"user":user, "api_key":api_key},
-                                verbose=verbose, raw_path=raw_path)
-    translator = DMCTranslator(intermediate_path, output_path, raw_path = raw_path,
+                                verbose=verbose)
+    translator = DMCTranslator(intermediate_path, output_path,
                                verbose=verbose, output_name = output_name, timestep = timestep)
 
     location_attr_names = location_attr_names.split(",") if location_attr_names!=None else []
@@ -54,7 +55,7 @@ def get_dmc(
     data, station = downloader.download(timestamps)
     translator.from_raw_to_netcdf(data, station, time_name="momento", lat_name="latitud",
                                    lon_name="longitud", id_name= "codigoNacional", location_attr_names=location_attr_names,
-                                   save=save_intermediate, start = start_time, end = end_time, time_interval=timestep, merge=True)
+                                   save=save_intermediate, start = start_time, end = end_time, time_interval=timestep, merge=cached)
 
     return data, station
 
@@ -67,7 +68,7 @@ def process_intermediate_data(intermediate_path:str = typer.Option(r".\intermedi
                               output_name: str= typer.Option(r"data_in_nc.nc", "--output-name"),
                               lat_name: str = typer.Option("Latitud", "--lat-name"),
                               lon_name: str = typer.Option("Longitud", "--lon-name"),
-                              time_name: str= typer.Option("timestamp", "--time-name"),
+                              time_name: str= typer.Option("time", "--time-name"),
                               location_attr_names: str=typer.Option(None, "--location-attr-names", "-l"),
                               id_name: str= typer.Option("ID-Stored", "--id-name"),
                               timestep: str = typer.Option(Timestep.N, "--timestep", "-t"),

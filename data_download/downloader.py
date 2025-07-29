@@ -29,7 +29,6 @@ class Downloader:
         self.client = httpx.Client()
         self.other_data = kwargs.get("other_data", {})
         self.verbose = kwargs.get("verbose", False)
-        print(f"Verbose {self.verbose}")
     
     # just get the stations data in {siteid: station_data} where station_data is a dict from json
     @abstractmethod

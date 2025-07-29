@@ -266,8 +266,12 @@ class Translator:
 
             if save:
                 intermediate_filepath = self.intermediate_path / self.file_info["intermediate_file"]["format"].format(**{"siteid":station_id})
-                # TODO: add data completion if merge is True
-                data.to_csv(intermediate_filepath, single_file=True)
+                if merge and intermediate_filepath.exists() and intermediate_filepath.is_file() :
+                    loaded = dd.read_csv(intermediate_filepath, sep=",", decimal=".", dtype = {column:"object" for column in data.columns})
+                    data = dd.concat([data,loaded]).drop_duplicates(time_name)
+                    data = data.sort_values(time_name, npartitions=1)
+    
+                data.to_csv(intermediate_filepath, single_file=True, index=False)
 
             ddfs[station_id] = {
                 "station_id": station_id,
