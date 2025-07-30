@@ -269,6 +269,7 @@ class Translator:
                 if merge and intermediate_filepath.exists() and intermediate_filepath.is_file() :
                     loaded = dd.read_csv(intermediate_filepath, sep=",", decimal=".", dtype = {column:"object" for column in data.columns})
                     data = dd.concat([data,loaded]).drop_duplicates(time_name)
+                    data[time_name] = dd.to_datetime(data[time_name])
                     data = data.sort_values(time_name, npartitions=1)
     
                 data.to_csv(intermediate_filepath, single_file=True, index=False)

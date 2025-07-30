@@ -1,14 +1,19 @@
 from .downloader import Downloader
 from pathlib import Path
-from utils.config import Config
 from json import JSONDecodeError
 import asyncio
 import httpx
 
 async def fetch_all_data(urls):
     async with httpx.AsyncClient() as client:
-        tasks = [client.get(url) for url in urls]
-        responses = await asyncio.gather(*tasks)
+        ready = False
+        while not ready:
+            try: 
+                tasks = [client.get(url) for url in urls]
+                responses = await asyncio.gather(*tasks)
+                ready = True
+            except httpx.ConnectTimeout as e:
+                print(e, " ...trying again")
         processed_responses = []
         for response in responses:
             try: 
@@ -39,6 +44,7 @@ class DMCDownloader(Downloader):
         info = [_info["info"] for _info in station_urls]
 
         responses = asyncio.run(fetch_all_data(urls))
+
         data = []
         for _info, _response in zip(info, responses):
             data.append({"info":_info, "data":_response})
