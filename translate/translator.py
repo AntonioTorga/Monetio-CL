@@ -115,7 +115,7 @@ class Translator:
             if column not in station_ddf.columns:
                 raise ValueError(f"No {column} column in Station file.")
         station_ddf = station_ddf.rename(columns={id_name: "siteid", lat_name:"latitude", lon_name:"longitude"})
-        station_ddf = station_ddf.set_index("siteid", sorted=True)
+        station_ddf = station_ddf.set_index("siteid", sort=True, shuffle_method='tasks')
         return station_ddf
 
     def preprocess_intermediate_data(self, ddf, time_name, site_id):
@@ -134,8 +134,8 @@ class Translator:
         ddf = ddf.rename(columns = rename)
         ddf = ddf.dropna(subset=["time"])
         ddf = ddf.drop_duplicates(subset=["time"])
-        ddf['time']= dd.to_datetime(ddf.time)
-        ddf = ddf.set_index("time", sorted=True)
+        ddf['time']= dd.to_datetime(ddf["time"])
+        ddf = ddf.set_index("time", sort=True, shuffle_method='tasks')
 
         return ddf
     
@@ -263,15 +263,13 @@ class Translator:
             if len(data.index)==0:
                 print(f"No data for station {station_id}")
                 continue
+            
+            intermediate_filepath = self.intermediate_path / self.file_info["intermediate_file"]["format"].format(**{"siteid":station_id})
+            if merge and intermediate_filepath.exists() and intermediate_filepath.is_file(): 
+                loaded = dd.read_csv(intermediate_filepath, sep=",", decimal=".", dtype = {column:"object" for column in data.columns})
+                data = dd.concat([data,loaded])
 
             if save:
-                intermediate_filepath = self.intermediate_path / self.file_info["intermediate_file"]["format"].format(**{"siteid":station_id})
-                if merge and intermediate_filepath.exists() and intermediate_filepath.is_file() :
-                    loaded = dd.read_csv(intermediate_filepath, sep=",", decimal=".", dtype = {column:"object" for column in data.columns})
-                    data = dd.concat([data,loaded]).drop_duplicates(time_name)
-                    data[time_name] = dd.to_datetime(data[time_name])
-                    data = data.sort_values(time_name, npartitions=1)
-    
                 data.to_csv(intermediate_filepath, single_file=True, index=False)
 
             ddfs[station_id] = {

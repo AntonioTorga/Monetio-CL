@@ -37,6 +37,11 @@ def get_dmc(
             cached: bool = typer.Option(False, "--cached", "-c"),
             save_intermediate: bool =typer.Option(False, "--save-intermediate"),
             ):
+    """
+    Download DMC data from start_time to end_time, and process into Melodies-Monet netcdf format.
+    If wanted saves the "intermediate" tabulated data in .csv format.
+    Also able to merge downloaded data with existing data in intermediate_path
+    """
     
     timestamps = get_timestamps(start_time,end_time,time_interval=timestep)
 

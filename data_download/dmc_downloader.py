@@ -5,7 +5,7 @@ import asyncio
 import httpx
 
 async def fetch_all_data(urls):
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=None) as client:
         ready = False
         while not ready:
             try: 
