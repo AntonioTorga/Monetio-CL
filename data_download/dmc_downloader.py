@@ -4,11 +4,12 @@ from json import JSONDecodeError
 import asyncio
 import httpx
 
+
 async def fetch_all_data(urls):
     async with httpx.AsyncClient(timeout=None) as client:
         ready = False
         while not ready:
-            try: 
+            try:
                 tasks = [client.get(url) for url in urls]
                 responses = await asyncio.gather(*tasks)
                 ready = True
@@ -16,13 +17,14 @@ async def fetch_all_data(urls):
                 print(e, " ...trying again")
         processed_responses = []
         for response in responses:
-            try: 
+            try:
                 x = response.json()
-            except JSONDecodeError: 
-                x= None
+            except JSONDecodeError:
+                x = None
             processed_responses.append(x)
         return processed_responses
-        
+
+
 class DMCDownloader(Downloader):
     def __init__(self, raw_path=None, **kwargs):
         data_url = r"https://climatologia.meteochile.gob.cl/application/servicios/getDatosRecientesEma/{siteid}/{year}/{month}?usuario={user}&token={api_key}"
@@ -30,14 +32,16 @@ class DMCDownloader(Downloader):
         super().__init__(data_url, stations_url, raw_path, **kwargs)
 
     def _get_station_ids(self):
-        return [station["codigoNacional"] for station in self.station_data["datosEstacion"]]
+        return [
+            station["codigoNacional"] for station in self.station_data["datosEstacion"]
+        ]
 
     def _get_stations_data(self):
         response = self.client.get(self.stations_url.format(**self.other_data))
         # TODO: manage unsuccesful response
         station_data = response.json()
         return station_data
-    
+
     # for a list in [{url, info}] format transform into [{info, data}] | data in dictionary from json
     def _get_data_for_station(self, station_urls):
         urls = [url["url"] for url in station_urls]
@@ -47,7 +51,6 @@ class DMCDownloader(Downloader):
 
         data = []
         for _info, _response in zip(info, responses):
-            data.append({"info":_info, "data":_response})
-        
+            data.append({"info": _info, "data": _response})
+
         return data
-        

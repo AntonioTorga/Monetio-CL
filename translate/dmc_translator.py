@@ -3,6 +3,7 @@ from dask import dataframe as dd
 import pandas as pd
 import json
 
+
 class DMCTranslator(Translator):
     def __init__(self, intermediate_path, output_path, **kwargs):
         super().__init__(intermediate_path, output_path, **kwargs)
