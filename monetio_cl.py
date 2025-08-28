@@ -37,25 +37,25 @@ app = typer.Typer(
 
 @app.command()
 def get_dmc(
-    start_time: Annotated[datetime, typer.Argument(formats=["%Y-%m-%d", "%d-%m-%Y"])],
-    end_time: Annotated[datetime, typer.Argument(formats=["%Y-%m-%d", "%d-%m-%Y"])],
-    user: Annotated[str, typer.Argument()],
-    api_key: Annotated[str, typer.Argument()],
+    start_time: Annotated[datetime, typer.Argument(formats=["%Y-%m-%d", "%d-%m-%Y"], help= "Start time for the resulting file"),],
+    end_time: Annotated[datetime, typer.Argument(formats=["%Y-%m-%d", "%d-%m-%Y"], help= "End time for the resulting file")],
+    user: Annotated[str, typer.Argument(help= "User for meteochile.gob.cl Probably an Email address.")],
+    api_key: Annotated[str, typer.Argument(help= "Api-Key provided by meteochile.gob.cl")],
     # raw_path: Annotated[Path, typer.Option(exists=True, dir_okay=True, file_okay=False, resolve_path=True)] = Path("./raw_data"),
     intermediate_path: Annotated[
         Path,
-        typer.Option(exists=True, dir_okay=True, file_okay=False, resolve_path=True),
+        typer.Option(exists=True, dir_okay=True, file_okay=False, resolve_path=True, help= "Folder in which to leave the intermediate files if save_intermediate is True. Also to merge with existing files if cache is True"),
     ] = Path("./inter_data"),
     output_path: Annotated[
         Path,
-        typer.Option(exists=True, dir_okay=True, file_okay=False, resolve_path=True),
+        typer.Option(exists=True, dir_okay=True, file_okay=False, resolve_path=True, help= "Folder in which to leave the resulting .netcdf file."),
     ] = Path("./output_data"),
-    output_name: str = typer.Option(r"dmc.nc", "--output-name", "-o"),
-    timestep: str = typer.Option(Timestep.N, "--timestep", "-t"),
-    location_attr_names: str = typer.Option(None, "--location-attribute-names", "-l"),
-    verbose: bool = typer.Option(False, "--verbose", "-v"),
-    cached: bool = typer.Option(False, "--cached", "-c"),
-    save_intermediate: bool = typer.Option(False, "--save-intermediate"),
+    output_name: str = typer.Option(r"dmc.nc", "--output-name", "-o", help= "Name of the resulting .netcdf file"),
+    timestep: str = typer.Option(Timestep.N, "--timestep", "-t", help="Time resolution for the result. If data doesn't have the resolution it provides the highest possible."),
+    location_attr_names: str = typer.Option(None, "--location-attribute-names", "-l", help="Location attributes like 'region', 'comuna',etc. To add to netcdf as coord."),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help= "Verbosity of the execution."),
+    cached: bool = typer.Option(False, "--cached", "-c", help= "Merge with existing files in the intermediate folder."),
+    save_intermediate: bool = typer.Option(False, "--save-intermediate", help= "Save the intermediate tabulated files used for netcdf composition."),
 ):
     """
     Download DMC data from start_time to end_time, and process into Melodies-Monet netcdf format.
@@ -113,17 +113,17 @@ def process_intermediate_data(
     intermediate_path: str = typer.Option(
         r".\intermediate_data", "--intermediate-path", "-i"
     ),
-    station_file: str = typer.Option("station.csv", "--station-filename", "-s"),
-    filename_regex: str = typer.Option(r"(\d+).csv", "--filename-regex", "-r"),
-    output_path: str = typer.Option(r".\MM_data", "--output-path"),
-    output_name: str = typer.Option(r"data_in_nc.nc", "--output-name"),
-    lat_name: str = typer.Option("Latitud", "--lat-name"),
-    lon_name: str = typer.Option("Longitud", "--lon-name"),
-    time_name: str = typer.Option("time", "--time-name"),
-    location_attr_names: str = typer.Option(None, "--location-attr-names", "-l"),
-    id_name: str = typer.Option("ID-Stored", "--id-name"),
-    timestep: str = typer.Option(Timestep.N, "--timestep", "-t"),
-    verbose: bool = typer.Option(False, "--verbosity", "-v"),
+    station_file: str = typer.Option("station.csv", "--station-filename", "-s", help="Path of the .csv station file."),
+    filename_regex: str = typer.Option(r"(\d+).csv", "--filename-regex", "-r", help= "Regular expression of the data files."),
+    output_path: str = typer.Option(r".\MM_data", "--output-path", help= "Folder in which to leave the resulting .netcdf file."),
+    output_name: str = typer.Option(r"data_in_nc.nc", "--output-name", help= "Name of the resulting .netcdf file"),
+    lat_name: str = typer.Option("Latitud", "--lat-name", help="Name of the latitude attribute in the station file"),
+    lon_name: str = typer.Option("Longitud", "--lon-name",help="Name of the longitude attribute in the station file"),
+    time_name: str = typer.Option("time", "--time-name", help="Name of the time attribute in the data files."),
+    location_attr_names: str = typer.Option(None, "--location-attr-names", "-l", help= "Location attributes like 'region', 'comuna',etc. To add to netcdf as coord."),
+    id_name: str = typer.Option("ID-Stored", "--id-name", help="Name of the ID attribute of observation sites in the station file"),
+    timestep: str = typer.Option(Timestep.N, "--timestep", "-t", help= "Time resolution for the result. If data doesn't have the resolution it provides the highest possible."),
+    verbose: bool = typer.Option(False, "--verbosity", "-v", help= "Verbosity of the execution."),
 ):
     """
     Process a batch of data located in intermediate_path, that is in intermediate format.

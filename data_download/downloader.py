@@ -9,9 +9,82 @@ import json
 
 
 class Downloader:
+    """ Downloader abstract class.
+
+    Abstract class that implements the general logic of downloading the data from an
+    observation network.
+        
+    Attributes
+    ----------
+
+    raw_path : pathlib.Path
+        Path pointing to a folder in which to save (if specified) the raw data downloaded.
+
+    station_data : dict
+        Dict containing the parsed data of the stations obtained from stations_url
+
+    data : list<dict>
+        List of dicts with "info" and "data" items. Where the data is
+        identified by the "info". Info serves as metadata for the data.
+
+    station_file: pathlib.Path
+        Raw station file path in which to save the station_data.
+
+    data_file_format: str
+        Formattable string for saving the data of the stations, meant to
+        be formatted with the "info".
+
+    stations_url: str
+        String that points to the resource of the data of all stations.
+
+    data_url: str
+        Formattable string meant to be formatted with the "info", points
+        to the data of certain station with the "info" required.
+
+    client: HTTPX.Client
+        Http client used to get the stations data.
+
+    other_data: dict
+        dict containing extra information that is added to "info".
+        Used to format things, can be things like "username", "subNetwork", etc.
+
+    verbose: bool
+        Verbosity of the execution.
+    
+    Methods
+    -------
+    _get_station_ids
+        Abstract method. Gets the station ids as a list.
+
+    _get_stations_data
+        Abstract method. Gets the station data from the stations_url
+
+    _get_data_for_station
+        Abstract method. Gets all the data from URLs provided,
+        used for one station at a time
+
+    _get_data
+        Manage getting the data of a network for some timestamps.
+        
+    _save
+        Saves the downloaded data to file.
+
+    download
+        Intended as the only exposed endpoint of the Class. 
+        Main routine managing all the download subprocesses.
+    """
     def __init__(self, data_url, stations_url, raw_path, **kwargs):
-        """
-        Downloads data and turns it into intermediate format
+        """Constructor
+
+        Parameters
+        ----------
+        data_url : str
+            Formattable string meant to be formatted with the "info", points
+            to the data of certain station with the "info" required.
+        stations_url : str
+            String that points to the resource of the data of all stations.
+        raw_path : pathlib.Path
+            Path pointing to a folder in which to save (if specified) the raw data downloaded.
         """
         self.raw_path = raw_path
 
@@ -33,16 +106,38 @@ class Downloader:
     # just get the stations data in {siteid: station_data} where station_data is a dict from json
     @abstractmethod
     def _get_stations_data(self):
-        """
-        Downloads the data for the given stations.
+        """ Gets the station ids as a list.
+
+        Returns all the station ids if self.station_data is not None. Meant to be run after
+        setting self.station_data 
+        
+        Returns
+        -------
+        list
+            List containing all the station ids.
         """
         pass
 
     # for a list in [{url, info}] format transform into [{info, data}] | data in dictionary from json
     @abstractmethod
     def _get_data_for_station(self, urls):
-        """
-        Downloads the data for the given stations.
+        """ Gets all the stations data.
+
+        Makes async requests for all the urls contained in station_urls, returns list with
+        data paired to information of said data.
+
+        Parameters
+        ----------
+        station_urls : list<dict>
+            List of dictionaries where every dict has a "url" and "info" item. "url"s value is
+            a url formatted with the "info", used to identify later the info that
+            was received from said url.
+        
+        Returns
+        -------
+        list<dict>
+            List of dictionaries where every dict has a "data" and "info" item. "data"s value is
+            the data obtained from a "URL" formatted with the corresponding "info".
         """
         pass
 
@@ -52,6 +147,24 @@ class Downloader:
 
     # Returns data in {siteid:[{info,data}]} format and stations in {siteid:station_data} format
     def _get_data(self, timestamps):
+        """Manage getting the data of a network for some timestamps
+
+        Parameters
+        ----------
+        timestamps : list(datetime.datetime)
+            Timestamps for which the data is obtained.
+
+        Returns
+        -------
+        dict
+            Dictionary with each key being a station, and each value being a list of
+            dictionaries with "data" and "info". Where data is the meteo data and info
+            is metadata of said info.
+        dict
+            Dictionary where each key is a station and each value the data of that station.
+            Like latitude, longitude, name, region, etc.
+            
+        """
         # stations_data: {siteid: ddf}
         self.station_data = self._get_stations_data()
 
@@ -75,6 +188,9 @@ class Downloader:
 
     # saves the raw data to file
     def _save(self):
+        """Saves raw data to file. Formats the data_file_format with the "info" of each
+        data dictionary in self.data.
+        """
         data = self.data
         for siteid, data_list in data.items():
             if self.verbose:
@@ -93,8 +209,30 @@ class Downloader:
             json.dump(self.station_data, fp)
 
     def download(self, timestamps=None, save=False):
-        """
-        Downloads the data for the given stations.
+        """Intended as the only exposed endpoint of the Class. 
+        Main routine managing all the download subprocesses.
+
+        Parameters
+        ----------
+        timestamps : list<datetime.datetime>, optional
+            Timestamps for which to get the data, by default None
+        save : bool, optional
+            Wether to save the data to file or just return, by default False
+
+        Returns
+        -------
+        dict
+            Dictionary with each key being a station, and each value being a list of
+            dictionaries with "data" and "info". Where data is the meteo data and info
+            is metadata of said info.
+        dict
+            Dictionary where each key is a station and each value the data of that station.
+            Like latitude, longitude, name, region, etc.
+
+        Raises
+        ------
+        ValueError
+            When timestamps is None, nothing to do and misuse of the method.
         """
         if timestamps == None:
             raise ValueError("No timestamps for download.")

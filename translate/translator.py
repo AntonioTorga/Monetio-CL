@@ -11,11 +11,67 @@ from utils.utils import to_float, create_data_vars_dict
 
 class Translator:
     """
-    Translates data from raw to intermediate format, and intermediate to netcdf
-    (Melodies-Monet ready) format.
+    Attributes
+    ----------
+    raw_path : pathlib.Path
+        Path pointing to a folder from which to retrieve (if necessary) the raw data downloaded.
+    intermediate_path : pathlib.Path
+        Path pointing to a folder in which to save (if specified) or retrieve the intermediate
+        (tabulated) data.
+    output_path : pathlib.Path
+        Path pointing to a folder in which to save the resulting netcdf (.nc Melodies-Monet ready)
+        file.
+    timestep: str
+        Data resolution for the netcdf file ('H', 'M', 'Y', etc)
+    verbose: bool
+        Verbosity of the execution.
+    file_info: dict
+        Dict storing information for the files which this class interacts with.
+
+    Methods
+    -------
+    _to_pd_dataframe
+        Turns raw data into a pandas dataframe
+    raw_to_intermediate_station
+        Turns raw data into tabulated data in dask dataframe format.
+    raw_to_intermediate_file
+        Turns a raw file to an intermediate file in dask dataframe format.
+    load_intermediate_data
+        Loads the intermediate data into dask dataframes from intermediate_path, also preprocesses it.
+    load_raw_data
+        Loads the raw data into dicts from the raw_path
+    preprocess_intermediate_station_data
+        Preprocesses the tabulated stations data changing column names to fit MM format.
+    preprocess_intermediate_data
+        Preprocesses the tabulated data for a single station, changing column names, changing dtypes, etc.
+    postprocess_xarray_data
+        Changes data resolution, limits time interval to analysis interval.
+    intermediate_to_xarray
+        Turns tabulated data in dask dataframe format to xarray Dataset
+    xarray_to_netcdf
+        Saves an xarray to netcdf (.nc) format to a file named as the output_file
+        in the output_path
+    from_raw_to_intermediate_format
+        Turns the entire raw data into intermediate tabulated data in dask dataframe format.
+    from_intermediate_to_netcdf
+        Turns the entire intermediate data into xarray and then saves in netcdf format 
+        (preprocess, turning to xarray and saving to netcdf)
+    from_raw_to_netcdf
+        Turns the entire raw data into intermediate, then xarray, and then saves to .netcdf file.
+        (turn to intermediate, preprocess, turn to xarray and saving to netcdf)
     """
 
     def __init__(self, intermediate_path, output_path, **kwargs):
+        """Constructor
+
+        Parameters
+        ----------
+        intermediate_path : pathlib.Path
+            Path pointing to a folder in which to save (if specified) or retrieve the intermediate
+            (tabulated) data.
+        output_path : pathlib.Path
+            Path pointing to a folder in which to save the resulting netcdf (.nc Melodies-Monet ready) file.
+        """
         self.raw_path = kwargs.get("raw_path")
         self.intermediate_path = intermediate_path
         self.output_path = output_path
@@ -46,13 +102,50 @@ class Translator:
 
     @abstractmethod
     def _to_pd_dataframe(self, file):
+        """Turns raw data into a pandas dataframe
+
+        Parameters
+        ----------
+        data : list<dict>
+            List of dicts where each dict represents a moment and its meteo data.
+
+        Returns
+        -------
+        pandas.Dataframe
+            Dataframe containing the a row for each moment and its meteo data.
+        """
         pass
 
     @abstractmethod
     def raw_to_intermediate_station(self, station_data):
+        """Turns raw data of the stations to a dask Dataframe.
+
+        Parameters
+        ----------
+        station_data : dict
+            Raw data of the stations 
+
+        Returns
+        -------
+        dask.dataframe.Dataframe
+            dask dataframe containing the data of the stations, each row is a station and contains
+            latitude, longitude, id, etc.
+        """
         pass
 
     def raw_to_intermediate_file(self, files):
+        """Turns a raw file to an intermediate file
+
+        Parameters
+        ----------
+        files : list
+            List of all the data (in raw format) to aggregate into a single dask dataframe.
+
+        Returns
+        -------
+        dask.dataframe.DataFrame
+            Dask dataframe containing for each row a moment and the meteo data of said moment.
+        """
         ddf = None
         for file in files:
             pd_dataframe = self._to_pd_dataframe(file)
@@ -65,8 +158,29 @@ class Translator:
 
     def load_intermediate_data(self, time_name, id_name, lat_name, lon_name):
         """
-        Loads the intermediate data from the intermediate path.
+        Loads the intermediate data into dask dataframes from intermediate_path
         Assumes all the data must be merged into a single dataframe.
+
+        Parameters
+        ----------
+        time_name : str
+            Name of the time attribute in the intermediate data.
+        id_name : str
+            Name of the id attribute in the intermediate data.
+        lat_name : str
+            Name of the latitude attribute in the intermediate data.
+        lon_name : str
+            Name of the longitude attribute in the intermediate data.
+
+        Returns
+        -------
+        dict
+            Dictionary where the keys are station ids and the values are another dict
+            with the "site_id" and the "data" in dask dataframe format
+            
+        dask.dataframe.DataFrame
+            dask dataframe containing the information of the observation sites in the
+            network. Each row is a site and contains id, latitude, longitude, etc.
         """
         data = {}
         for f in Path(self.intermediate_path).iterdir():
@@ -93,6 +207,14 @@ class Translator:
         return data, station_ddf
 
     def load_raw_data(self):
+        """Loads the raw data into dicts from the raw_path
+
+        Returns
+        -------
+        dict
+            Dictionary where the keys are station ids and the value is a list
+            of dictionaries with the raw data.
+        """
         filename_regex = self.file_info["input_file"]["regex"]
         station_filename_regex = self.file_info["station_file"]["raw_regex"]
         station_file = None
@@ -132,6 +254,30 @@ class Translator:
     def preprocess_intermediate_station_data(
         self, station_ddf, id_name, lat_name, lon_name
     ):
+        """Preprocesses the tabulated stations data changing column names to fit MM format.
+
+        Parameters
+        ----------
+        station_ddf : dask.dataframe.DataFrame
+            dask dataframe containing data for each station. Like latitude, longitude, etc.
+        id_name : str
+            Name of the id attribute in the intermediate data.
+        lat_name : str
+            Name of the latitude attribute in the intermediate data.
+        lon_name : str
+            Name of the longitude attribute in the intermediate data.
+
+        Returns
+        -------
+        dask.dataframe.DataFrame
+            dask dataframe containing data for each station. Like latitude, longitude, etc.
+            Preprocessed to make it into MM format.
+
+        Raises
+        ------
+        ValueError
+            Raises if the id_name, lat_name or lon_name doesn't exist in the file.
+        """
         for column in [id_name, lat_name, lon_name]:
             if column not in station_ddf.columns:
                 raise ValueError(f"No {column} column in Station file.")
@@ -142,6 +288,28 @@ class Translator:
         return station_ddf
 
     def preprocess_intermediate_data(self, ddf, time_name, site_id):
+        """Preprocesses the tabulated data for a single station, changing column names, changing dtypes, etc.
+
+        Parameters
+        ----------
+        ddf : dask.dataframe.DataFrame
+            Tabulated data of a station's meteo data. Each row is a moment and can contain Rain, Wind, etc.
+        time_name : str
+            Name of the time attribute in the intermediate data.
+        site_id : str
+            Id of the site being processed. Important for raising an error.
+
+        Returns
+        -------
+        dask.dataframe.DataFrame
+            Tabulated data of a station's meteo data. Each row is a moment and can contain Rain, Wind, etc.
+            Preprocessed into MM format.
+
+        Raises
+        ------
+        ValueError
+            Raised if time_name is not in the columns of the sites dataframe.
+        """
         if not time_name in ddf.columns:
             raise ValueError(f"No column {time_name} in file for {site_id} site.")
         rename = {time_name: "time"}
@@ -162,7 +330,27 @@ class Translator:
 
         return ddf
 
-    def postprocess_xarray_data(self, xrds, time_interval="N", start=None, end=None):
+    def postprocess_xarray_data(self, xrds, timestep="N", start=None, end=None):
+        """Changes data resolution, limits time interval to analysis interval.
+
+        Parameters
+        ----------
+        xrds : xarray.Dataset
+            Xarray dataset with all the meteo data for all the stations.
+        timestep : str, optional
+            time resolution for the resulting netcdf file, by default "N"
+        start : datetime.datetime, optional
+            Start of the analysis window. Used to filter the data, by default None
+            If not provided no filtering is performed.
+        end : datetime.datetime, optional
+            End of the analysis window. Used to filter the data, by default None
+            If not provided no filtering is performed.
+
+        Returns
+        -------
+        xarray.Dataset
+            Postprocessed dataset. Very similar to the one received, changed resolution and time interval maybe.
+        """
         dict_intervals = {
             "H": "1h",
             "h": "1h",
@@ -171,9 +359,9 @@ class Translator:
             "Y": "1Y",
             "N": None,
         }
-        time_interval = dict_intervals[time_interval]
-        if time_interval != None:
-            xrds = xrds.resample(time=time_interval).mean()
+        timestep = dict_intervals[timestep]
+        if timestep != None:
+            xrds = xrds.resample(time=timestep).mean()
 
         xrds = xrds.set_coords(["siteid", "latitude", "longitude"])
 
@@ -183,9 +371,23 @@ class Translator:
         return xrds
 
     def intermediate_to_xarray(self, data, station_ddf, location_attr_names=[]):
-        """
-        Converts the intermediate data to xarray format.
-        ddfs: list of dask dataframes for each station.
+        """Converts the intermediate data to xarray format.
+
+        Parameters
+        ----------
+        data : dict
+            dict where each key is a siteid and the value is a dask dataframe with the meteo data.
+        station_ddf : dask.dataframe.DataFrame
+            Dask dataframe with the info of every observation site. 
+        location_attr_names : list<str>, optional
+            List of strings where every string is an attribute in the station_ddf
+            that could be used to select sites. Like region, comune, etc.
+            By default []
+
+        Returns
+        -------
+        xarray.Dataset
+            Xarray dataset with all the meteo data for all the stations.
         """
         data_dd = []
         site_id_dim = []
@@ -264,8 +466,13 @@ class Translator:
         return xrds
 
     def xarray_to_netcdf(self, xarray):
-        """
-        Save the xarray dataset to netcdf format in the output path.
+        """ Saves an xarray to netcdf (.nc) format to a file named as the output_file
+            in the output_path
+
+        Parameters
+        ----------
+        xarray : xarray.Dataset
+            Xarray dataset ready to be saved 
         """
         file_path = self.output_path / (self.file_info["output_file"]["format"])
         if self.verbose:
@@ -276,9 +483,36 @@ class Translator:
     def from_raw_to_intermediate_format(
         self, raw_data=None, raw_station=None, save=False, merge=False, time_name=None
     ):
-        """
-        Converts the raw data to intermediate format.
-        Collects all the raw files that go into each intermediate station file.
+        """Turns the entire raw data into intermediate tabulated data in dask dataframe format
+        If raw_data or raw_station is not provided it is loaded from raw_path using the file_info
+
+        Parameters
+        ----------
+        raw_data : dict<dict>, optional
+            dict where the key is a station id and the value is a dict with the meteo data
+            of the station, by default None
+        raw_station : dict, optional
+            Dict with the data of the stations, by default None
+        save : bool, optional
+            Wether to save the intermediate data into the intermediate_path, by default False
+        merge : bool, optional
+            Wether to merge the existing files in intermediate_path with the new data
+            , by default False
+        time_name : str, optional
+            Name of the time attribute in the intermediate data, by default None
+
+        Returns
+        -------
+        dict
+            a dictionary where every key is a station id and the value is a dict
+            with the station id and the "data" (meteo data)
+        dask.dataframe.DataFrame
+            dask dataframe with the stations data.            
+
+        Raises
+        ------
+        FileNotFoundError
+            Raised if there is no data provided and no raw_path.
         """
         if raw_data == None or raw_station == None:
             if self.raw_path == None:
@@ -332,8 +566,25 @@ class Translator:
     def from_intermediate_to_netcdf(
         self, time_name, id_name, lat_name, lon_name, data=None, station_ddf=None
     ):
-        """
-        Converts the intermediate data to netcdf format.
+        """Turns the entire intermediate data into xarray and then saves in netcdf format 
+        (preprocess, turning to xarray and saving to netcdf)
+
+        Parameters
+        ----------
+        time_name : str
+            Name of the time attribute in the intermediate data.
+        id_name : str
+            Name of the id attribute in the intermediate data.
+        lat_name : str
+            Name of the latitude attribute in the intermediate data.
+        lon_name : str
+            Name of the longitude attribute in the intermediate data.
+        data : dict, optional
+            dict where each key is a siteid and the value is a dask dataframe with the meteo data.
+            if not provided loaded from intermediate_path
+        station_ddf : dask.dataframe.DataFrame, optional
+            Dask dataframe with the info of every observation site.
+            if not provided loaded from intermediate_path 
         """
         if data == None or station_ddf == None:
             data, station_ddf = self.load_intermediate_data(
@@ -353,12 +604,45 @@ class Translator:
         location_attr_names=[],
         start=None,
         end=None,
-        time_interval="N",
+        timestep="N",
         save=False,
         merge=False,
     ):
-        """
-        Converts the raw data to netcdf format.
+        """Turns the entire raw data into intermediate, then xarray, and then saves to .netcdf file.
+        (turn to intermediate, preprocess, turn to xarray and saving to netcdf)
+
+        Parameters
+        ----------
+        raw_data : dict<dict>, optional
+            dict where the key is a station id and the value is a dict with the meteo data
+            of the station, by default None
+        raw_station : dict, optional
+            Dict with the data of the stations, by default None
+        time_name : str
+            Name of the time attribute in the intermediate data, by default "momento"
+        id_name : str
+            Name of the id attribute in the intermediate data, by default "codigoNacional"
+        lat_name : str
+            Name of the latitude attribute in the intermediate data, by default "latitud"
+        lon_name : str
+            Name of the longitude attribute in the intermediate data, by default "longitud"
+        location_attr_names : list<str>, optional
+            List of strings where every string is an attribute in the station_ddf
+            that could be used to select sites. Like region, comune, etc.
+            By default []
+        timestep : str, optional
+            time resolution for the resulting netcdf file, by default "N"
+        start : datetime.datetime, optional
+            Start of the analysis window. Used to filter the data, by default None
+            If not provided no filtering is performed.
+        end : datetime.datetime, optional
+            End of the analysis window. Used to filter the data, by default None
+            If not provided no filtering is performed.
+        save : bool, optional
+            Wether to save the intermediate data into the intermediate_path, by default False
+        merge : bool, optional
+            Wether to merge the existing files in intermediate_path with the new data
+            , by default False
         """
         # load the data from the input path
         ddfs, station_ddf = self.from_raw_to_intermediate_format(
@@ -378,7 +662,7 @@ class Translator:
             ddfs, station_ddf, location_attr_names=location_attr_names
         )
         xarray = self.postprocess_xarray_data(
-            xarray, time_interval=time_interval, start=start, end=end
+            xarray, timestep=timestep, start=start, end=end
         )
         # save the data to netcdf format
         self.xarray_to_netcdf(xarray)
