@@ -151,7 +151,7 @@ def get_dmc(
         save=save_intermediate,
         start=start_time,
         end=end_time,
-        time_interval=timestep,
+        timestep=timestep,
         merge=cached,
     )
 

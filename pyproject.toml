@@ -16,6 +16,7 @@ dependencies = [
         "xarray",
         "pyarrow",
         "httpx",
+        "netcdf4",
 ]
 
 [project.scripts]

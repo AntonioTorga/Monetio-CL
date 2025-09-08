@@ -8,7 +8,6 @@ import re
 import json
 from ..utils.utils import to_float, create_data_vars_dict
 
-
 class Translator:
     """
     Attributes
@@ -323,11 +322,10 @@ class Translator:
                 if ddf[col].dtype not in ["float64", "int64", "int32", "float32"]:
                     ddf[col] = ddf[col].apply(to_float, meta=float)
         ddf = ddf.rename(columns=rename)
+        ddf["time"] = dd.to_datetime(ddf["time"])
         ddf = ddf.dropna(subset=["time"])
         ddf = ddf.drop_duplicates(subset=["time"])
-        ddf["time"] = dd.to_datetime(ddf["time"])
-        ddf = ddf.set_index("time", sort=True, shuffle_method="tasks")
-
+        ddf = ddf.set_index("time")
         return ddf
 
     def postprocess_xarray_data(self, xrds, timestep="N", start=None, end=None):
@@ -412,13 +410,12 @@ class Translator:
             lat_dim.append(lat)
             lon_dim.append(lon)
 
-            # support for location attributes provided by the user
             for attribute in location_attr_dims.keys():
                 x = id_row[[attribute]].iloc[0][attribute]
                 location_attr_dims[attribute].append(x)
 
             columns.update(_ddf.columns.to_list())
-            timestamps.update(_ddf.index.compute().to_list())
+            timestamps.update(_ddf.index.compute().to_list()) #TODO: encontrar de otra forma los timestamps
 
             if self.verbose:
                 print(f"Site {site_id} processed.")
@@ -427,9 +424,15 @@ class Translator:
 
         if self.verbose:
             print(f"Computing dask dataframes into pandas dataframes.")
+        
         data_df = [
             ddf.compute().reindex(timestamps, fill_value=np.nan) for ddf in data_dd
         ]
+
+        # monotonic = True
+        # for df in data_df:
+        #     monotonic = monotonic and df.index.is_monotonic_increasing
+        # print(f"The dfs are monotonic increasing: {monotonic}")
 
         if self.verbose:
             print("Creating xarray dataset...")
