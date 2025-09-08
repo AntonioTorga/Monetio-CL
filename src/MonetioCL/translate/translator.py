@@ -6,7 +6,7 @@ import xarray as xr
 import numpy as np
 import re
 import json
-from utils.utils import to_float, create_data_vars_dict
+from ..utils.utils import to_float, create_data_vars_dict
 
 
 class Translator:
@@ -54,7 +54,7 @@ class Translator:
     from_raw_to_intermediate_format
         Turns the entire raw data into intermediate tabulated data in dask dataframe format.
     from_intermediate_to_netcdf
-        Turns the entire intermediate data into xarray and then saves in netcdf format 
+        Turns the entire intermediate data into xarray and then saves in netcdf format
         (preprocess, turning to xarray and saving to netcdf)
     from_raw_to_netcdf
         Turns the entire raw data into intermediate, then xarray, and then saves to .netcdf file.
@@ -123,7 +123,7 @@ class Translator:
         Parameters
         ----------
         station_data : dict
-            Raw data of the stations 
+            Raw data of the stations
 
         Returns
         -------
@@ -177,7 +177,7 @@ class Translator:
         dict
             Dictionary where the keys are station ids and the values are another dict
             with the "site_id" and the "data" in dask dataframe format
-            
+
         dask.dataframe.DataFrame
             dask dataframe containing the information of the observation sites in the
             network. Each row is a site and contains id, latitude, longitude, etc.
@@ -378,7 +378,7 @@ class Translator:
         data : dict
             dict where each key is a siteid and the value is a dask dataframe with the meteo data.
         station_ddf : dask.dataframe.DataFrame
-            Dask dataframe with the info of every observation site. 
+            Dask dataframe with the info of every observation site.
         location_attr_names : list<str>, optional
             List of strings where every string is an attribute in the station_ddf
             that could be used to select sites. Like region, comune, etc.
@@ -466,13 +466,13 @@ class Translator:
         return xrds
 
     def xarray_to_netcdf(self, xarray):
-        """ Saves an xarray to netcdf (.nc) format to a file named as the output_file
+        """Saves an xarray to netcdf (.nc) format to a file named as the output_file
             in the output_path
 
         Parameters
         ----------
         xarray : xarray.Dataset
-            Xarray dataset ready to be saved 
+            Xarray dataset ready to be saved
         """
         file_path = self.output_path / (self.file_info["output_file"]["format"])
         if self.verbose:
@@ -507,7 +507,7 @@ class Translator:
             a dictionary where every key is a station id and the value is a dict
             with the station id and the "data" (meteo data)
         dask.dataframe.DataFrame
-            dask dataframe with the stations data.            
+            dask dataframe with the stations data.
 
         Raises
         ------
@@ -566,7 +566,7 @@ class Translator:
     def from_intermediate_to_netcdf(
         self, time_name, id_name, lat_name, lon_name, data=None, station_ddf=None
     ):
-        """Turns the entire intermediate data into xarray and then saves in netcdf format 
+        """Turns the entire intermediate data into xarray and then saves in netcdf format
         (preprocess, turning to xarray and saving to netcdf)
 
         Parameters
@@ -584,7 +584,7 @@ class Translator:
             if not provided loaded from intermediate_path
         station_ddf : dask.dataframe.DataFrame, optional
             Dask dataframe with the info of every observation site.
-            if not provided loaded from intermediate_path 
+            if not provided loaded from intermediate_path
         """
         if data == None or station_ddf == None:
             data, station_ddf = self.load_intermediate_data(

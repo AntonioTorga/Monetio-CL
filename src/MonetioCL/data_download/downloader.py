@@ -1,19 +1,15 @@
 import httpx
 from abc import abstractmethod
-from pathlib import Path
-from datetime import datetime
-from utils.utils import url_creator
-from functools import partial
-from translate.translator import Translator
+from ..utils.utils import url_creator
 import json
 
 
 class Downloader:
-    """ Downloader abstract class.
+    """Downloader abstract class.
 
     Abstract class that implements the general logic of downloading the data from an
     observation network.
-        
+
     Attributes
     ----------
 
@@ -50,7 +46,7 @@ class Downloader:
 
     verbose: bool
         Verbosity of the execution.
-    
+
     Methods
     -------
     _get_station_ids
@@ -65,14 +61,15 @@ class Downloader:
 
     _get_data
         Manage getting the data of a network for some timestamps.
-        
+
     _save
         Saves the downloaded data to file.
 
     download
-        Intended as the only exposed endpoint of the Class. 
+        Intended as the only exposed endpoint of the Class.
         Main routine managing all the download subprocesses.
     """
+
     def __init__(self, data_url, stations_url, raw_path, **kwargs):
         """Constructor
 
@@ -106,11 +103,11 @@ class Downloader:
     # just get the stations data in {siteid: station_data} where station_data is a dict from json
     @abstractmethod
     def _get_stations_data(self):
-        """ Gets the station ids as a list.
+        """Gets the station ids as a list.
 
         Returns all the station ids if self.station_data is not None. Meant to be run after
-        setting self.station_data 
-        
+        setting self.station_data
+
         Returns
         -------
         list
@@ -121,7 +118,7 @@ class Downloader:
     # for a list in [{url, info}] format transform into [{info, data}] | data in dictionary from json
     @abstractmethod
     def _get_data_for_station(self, urls):
-        """ Gets all the stations data.
+        """Gets all the stations data.
 
         Makes async requests for all the urls contained in station_urls, returns list with
         data paired to information of said data.
@@ -132,7 +129,7 @@ class Downloader:
             List of dictionaries where every dict has a "url" and "info" item. "url"s value is
             a url formatted with the "info", used to identify later the info that
             was received from said url.
-        
+
         Returns
         -------
         list<dict>
@@ -163,7 +160,7 @@ class Downloader:
         dict
             Dictionary where each key is a station and each value the data of that station.
             Like latitude, longitude, name, region, etc.
-            
+
         """
         # stations_data: {siteid: ddf}
         self.station_data = self._get_stations_data()
@@ -209,7 +206,7 @@ class Downloader:
             json.dump(self.station_data, fp)
 
     def download(self, timestamps=None, save=False):
-        """Intended as the only exposed endpoint of the Class. 
+        """Intended as the only exposed endpoint of the Class.
         Main routine managing all the download subprocesses.
 
         Parameters

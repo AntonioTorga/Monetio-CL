@@ -6,16 +6,16 @@ import httpx
 
 
 async def fetch_all_data(urls: list):
-    """ Fetchs all the data from DMC API.
-    
+    """Fetchs all the data from DMC API.
+
     Requests all the URLS provided with an HTTPX AsyncClient.
     Gathers all the responses in a tasks list and then returns them parsed.
-    
+
     Parameters
     ----------
     urls : list
         list of URLS meant to be requested (GET) by HTTPX Async Client.
-        
+
     Returns
     -------
     list
@@ -43,24 +43,24 @@ async def fetch_all_data(urls: list):
 
 
 class DMCDownloader(Downloader):
-    """ Downloader of the DMC network data.
+    """Downloader of the DMC network data.
 
     Class in charge of specifics of the download of the DMC observation network.
     It inherits from Downloader class and provides it with the specifics functions
     needed to interact with that specific network.
-        
+
     Attributes
     ----------
-    data_url : string 
+    data_url : string
         Formattable string of the URL used to get the actual data.
-        It contains a series of attributes enclosed in brackets, meant to be filled 
-        with information provided as a dictionary. The keys of said dictionary must coincide 
+        It contains a series of attributes enclosed in brackets, meant to be filled
+        with information provided as a dictionary. The keys of said dictionary must coincide
         with the names of the attributes (there can be extra items in the dict but
         not less that what are needed).
     stations_url
         Same as the data_url but the URL points to data for all the stations in the network,
         such as the name, latitude, longitude, etc.
-    
+
     Methods
     -------
 
@@ -74,9 +74,10 @@ class DMCDownloader(Downloader):
         Gets all the data from URLs provided.
 
     """
-    def __init__(self, raw_path:Path = None, **kwargs):
+
+    def __init__(self, raw_path: Path = None, **kwargs):
         """
-        Constructor 
+        Constructor
 
         Parameters
         ----------
@@ -91,11 +92,11 @@ class DMCDownloader(Downloader):
         super().__init__(data_url, stations_url, raw_path, **kwargs)
 
     def _get_station_ids(self):
-        """ Gets the station ids as a list.
+        """Gets the station ids as a list.
 
         Returns all the station ids if self.station_data is not None. Meant to be run after
-        setting self.station_data 
-        
+        setting self.station_data
+
         Returns
         -------
         list
@@ -106,11 +107,11 @@ class DMCDownloader(Downloader):
         ]
 
     def _get_stations_data(self):
-        """ Gets the station data from the stations_url
+        """Gets the station data from the stations_url
 
         Makes a GET request to the stations_url, parses the json response and returns it
         as a dictionary.
-        
+
         Returns
         -------
         dict
@@ -122,8 +123,8 @@ class DMCDownloader(Downloader):
         return station_data
 
     # for a list in [{url, info}] format transform into [{info, data}] | data in dictionary from json
-    def _get_data_for_station(self, station_urls : list):
-        """ Gets all the stations data.
+    def _get_data_for_station(self, station_urls: list):
+        """Gets all the stations data.
 
         Makes async requests for all the urls contained in station_urls, returns list with
         data paired to information of said data.
@@ -134,7 +135,7 @@ class DMCDownloader(Downloader):
             List of dictionaries where every dict has a "url" and "info" item. "url"s value is
             a url formatted with the "info", used to identify later the info that
             was received from said url.
-        
+
         Returns
         -------
         list<dict>

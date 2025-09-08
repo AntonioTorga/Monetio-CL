@@ -1,4 +1,4 @@
-from translate.translator import Translator
+from .translator import Translator
 from dask import dataframe as dd
 import pandas as pd
 import json
@@ -17,6 +17,7 @@ class DMCTranslator(Translator):
     raw_to_intermediate_station
         Turns raw data of the stations to a dask Dataframe.
     """
+
     def __init__(self, intermediate_path, output_path, **kwargs):
         """Constructor
 
@@ -55,7 +56,7 @@ class DMCTranslator(Translator):
         Parameters
         ----------
         station_data : dict
-            Raw data of the stations 
+            Raw data of the stations
 
         Returns
         -------
