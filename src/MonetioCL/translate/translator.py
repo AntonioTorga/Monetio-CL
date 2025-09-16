@@ -8,6 +8,7 @@ import re
 import json
 from ..utils.utils import to_float, create_data_vars_dict
 
+
 class Translator:
     """
     Attributes
@@ -182,20 +183,29 @@ class Translator:
             network. Each row is a site and contains id, latitude, longitude, etc.
         """
         data = {}
+
         for f in Path(self.intermediate_path).iterdir():
             match = re.search(self.file_info["intermediate_file"]["regex"], f.name)
             if f.is_file() and match:
                 # get the station id and type from the filename
                 site_id = int(match.group(1))
-                ddf = dd.read_csv(f, sep=",", decimal=".")
+                if self.verbose:
+                    print(f"Loading site {site_id} ...")
+
+                ddf = dd.read_csv(
+                    f,
+                    sep=",",
+                    decimal=".",
+                )
                 try:
                     ddf = self.preprocess_intermediate_data(ddf, time_name, site_id)
                 except ValueError as e:
                     continue
                 data[site_id] = {"site_id": site_id, "data": ddf}
+
         station_ddf = dd.read_csv(
             self.intermediate_path
-            / self.file_info["station_file"]["intermediate_regex"],
+            / self.file_info["station_file"]["intermediate_format"],
             sep=",",
             decimal=".",
         )
@@ -319,8 +329,7 @@ class Translator:
                 pos_replacement = col.replace("/", "|")
                 if col != pos_replacement:
                     rename[col] = pos_replacement
-                if ddf[col].dtype not in ["float64", "int64", "int32", "float32"]:
-                    ddf[col] = ddf[col].apply(to_float, meta=float)
+                ddf[col] = ddf[col].apply(to_float, meta=float)
         ddf = ddf.rename(columns=rename)
         ddf["time"] = dd.to_datetime(ddf["time"])
         ddf = ddf.dropna(subset=["time"])
@@ -368,7 +377,9 @@ class Translator:
 
         return xrds
 
-    def intermediate_to_xarray(self, data, station_ddf, location_attr_names=[]):
+    def intermediate_to_xarray(
+        self, data, station_ddf, location_attr_names=[], timestamps=None
+    ):
         """Converts the intermediate data to xarray format.
 
         Parameters
@@ -392,7 +403,7 @@ class Translator:
         lat_dim = []
         lon_dim = []
         location_attr_dims = {attribute: [] for attribute in location_attr_names}
-        timestamps = set()
+        timestamps_set = set()
         columns = set()
 
         for site_id, data_dict in data.items():
@@ -415,30 +426,28 @@ class Translator:
                 location_attr_dims[attribute].append(x)
 
             columns.update(_ddf.columns.to_list())
-            timestamps.update(_ddf.index.compute().to_list()) #TODO: encontrar de otra forma los timestamps
+            if timestamps == None:
+                timestamps_set.update(_ddf.index.compute().to_list())
 
             if self.verbose:
                 print(f"Site {site_id} processed.")
 
-        timestamps = sorted(list(timestamps))
+        timestamps_list = (
+            sorted(list(timestamps_set)) if timestamps == None else sorted(timestamps)
+        )
 
         if self.verbose:
             print(f"Computing dask dataframes into pandas dataframes.")
-        
-        data_df = [
-            ddf.compute().reindex(timestamps, fill_value=np.nan) for ddf in data_dd
-        ]
 
-        # monotonic = True
-        # for df in data_df:
-        #     monotonic = monotonic and df.index.is_monotonic_increasing
-        # print(f"The dfs are monotonic increasing: {monotonic}")
+        data_df = [
+            ddf.compute().reindex(timestamps_list, fill_value=np.nan) for ddf in data_dd
+        ]
 
         if self.verbose:
             print("Creating xarray dataset...")
-        data_vars = create_data_vars_dict(data_df, timestamps, columns)
+        data_vars = create_data_vars_dict(data_df, timestamps_list, columns)
         coords = {
-            "time": ("time", timestamps),
+            "time": ("time", timestamps_list),
             "latitude": ("x", lat_dim),
             "longitude": ("x", lon_dim),
             "siteid": ("x", list(map(str, site_id_dim))),
@@ -593,7 +602,9 @@ class Translator:
             data, station_ddf = self.load_intermediate_data(
                 time_name, id_name, lat_name, lon_name
             )
-        xarray = self.intermediate_to_xarray(data, station_ddf)
+        xarray = self.intermediate_to_xarray(
+            data, station_ddf, location_attr_names=location_attr_names
+        )
         self.xarray_to_netcdf(xarray)
 
     def from_raw_to_netcdf(
@@ -613,6 +624,7 @@ class Translator:
     ):
         """Turns the entire raw data into intermediate, then xarray, and then saves to .netcdf file.
         (turn to intermediate, preprocess, turn to xarray and saving to netcdf)
+        Want to deprecate this one so every aggregation of functions occurr outside of this class
 
         Parameters
         ----------

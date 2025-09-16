@@ -56,7 +56,6 @@ def get_dmc(
     api_key: Annotated[
         str, typer.Argument(help="Api-Key provided by meteochile.gob.cl")
     ],
-    # raw_path: Annotated[Path, typer.Option(exists=True, dir_okay=True, file_okay=False, resolve_path=True)] = Path("./raw_data"),
     intermediate_path: Annotated[
         Path,
         typer.Option(
@@ -95,10 +94,10 @@ def get_dmc(
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Verbosity of the execution."
     ),
-    cached: bool = typer.Option(
+    merge: bool = typer.Option(
         False,
-        "--cached",
-        "-c",
+        "--merge",
+        "-m",
         help="Merge with existing files in the intermediate folder.",
     ),
     save_intermediate: bool = typer.Option(
@@ -114,12 +113,13 @@ def get_dmc(
     """
 
     timestamps = get_timestamps(start_time, end_time, time_interval=timestep)
+    download_timestamps = timestamps
 
-    if intermediate_path != None and cached:
+    if intermediate_path != None and merge:
         existing_timestamps = get_existing_timestamps(
             intermediate_path, r"{\d}.csv", time_name="momento"
         )
-        timestamps = list(set(timestamps) - set(existing_timestamps))
+        download_timestamps = list(set(download_timestamps) - set(existing_timestamps))
 
     downloader = DMCDownloader(
         other_data={"user": user, "api_key": api_key}, verbose=verbose
@@ -139,43 +139,72 @@ def get_dmc(
     print(
         f"Downloading DMC data from {start_time.strftime("%d-%m-%Y")} to {end_time.strftime("%d-%m-%Y")}"
     )
-    data, station = downloader.download(timestamps)
-    translator.from_raw_to_netcdf(
-        data,
-        station,
-        time_name="momento",
-        lat_name="latitud",
-        lon_name="longitud",
-        id_name="codigoNacional",
-        location_attr_names=location_attr_names,
-        save=save_intermediate,
-        start=start_time,
-        end=end_time,
-        timestep=timestep,
-        merge=cached,
+    data, station = downloader.download(download_timestamps)
+
+    ddfs, station_ddf = translator.from_raw_to_intermediate_format(
+        data, station, save=save_intermediate, merge=merge, time_name="momento"
     )
 
-    return data, station
+    for site_id, ddf in ddfs.items():
+        ddfs[site_id]["data"] = translator.preprocess_intermediate_data(
+            ddf["data"], "momento", site_id=site_id
+        )
+
+    station_ddf = translator.preprocess_intermediate_station_data(
+        station_ddf, "codigoNacional", "latitud", "longitud"
+    )
+
+    xarray = translator.intermediate_to_xarray(
+        ddfs,
+        station_ddf,
+        location_attr_names=location_attr_names,
+        timestamps=timestamps,
+    )
+
+    xarray = translator.postprocess_xarray_data(
+        xarray, timestep=timestep, start=start_time, end=end_time
+    )
+
+    return xarray
 
 
 @app.command()
 def process_intermediate_data(
-    intermediate_path: str = typer.Option(
-        r".\intermediate_data", "--intermediate-path", "-i"
-    ),
-    station_file: str = typer.Option(
-        "station.csv", "--station-filename", "-s", help="Path of the .csv station file."
-    ),
+    intermediate_path: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            dir_okay=True,
+            file_okay=False,
+            resolve_path=True,
+            help="Folder with the intermediate files",
+        ),
+    ] = Path("./inter_data"),
+    station_file: Annotated[
+        Path,
+        typer.Argument(
+            exists=True,
+            dir_okay=False,
+            file_okay=True,
+            resolve_path=True,
+            help=".csv file with the station info",
+        ),
+    ] = Path("./stations.csv"),
+    output_path: Annotated[
+        Path,
+        typer.Option(
+            exists=True,
+            dir_okay=True,
+            file_okay=False,
+            resolve_path=True,
+            help="Path where to leave the netcdf data.",
+        ),
+    ] = Path("."),
     filename_regex: str = typer.Option(
         r"(\d+).csv",
         "--filename-regex",
         "-r",
         help="Regular expression of the data files.",
-    ),
-    output_path: str = typer.Option(
-        r".\MM_data",
-        "--output-path",
-        help="Folder in which to leave the resulting .netcdf file.",
     ),
     output_name: str = typer.Option(
         r"data_in_nc.nc", "--output-name", help="Name of the resulting .netcdf file"
@@ -220,16 +249,6 @@ def process_intermediate_data(
     contains the data of 1 (one) station. It can have any number of data variables.
     """
 
-    intermediate_path = Path(intermediate_path)
-    station_file = (
-        Path(station_file)
-        if Path(station_file).exists()
-        else intermediate_path / station_file
-    )
-
-    check_path_exists(intermediate_path)
-    check_path_exists(output_path, create=True)
-    check_file(station_file)
     location_attr_names = (
         location_attr_names.split(",") if location_attr_names != None else []
     )
@@ -245,9 +264,14 @@ def process_intermediate_data(
         timestep=timestep,
     )
 
-    translator.from_intermediate_to_netcdf(
-        time_name, id_name, lat_name, lon_name, location_attr_names
+    data, station_ddf = translator.load_intermediate_data(
+        time_name, id_name, lat_name, lon_name
     )
+
+    xarray = translator.intermediate_to_xarray(
+        data, station_ddf, location_attr_names=location_attr_names
+    )
+    translator.xarray_to_netcdf(xarray)
 
 
 if __name__ == "__main__":
