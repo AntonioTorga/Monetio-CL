@@ -2,10 +2,13 @@ import json
 import os
 import pathlib
 
+
 def read_config_file():
     # read JSON config file
     current_folder = pathlib.Path(__file__).parent.absolute()
-    with open(os.path.join(current_folder, '..\\config\\config.json')) as json_data_file:
+    with open(
+        os.path.join(current_folder, "..\\config\\config.json")
+    ) as json_data_file:
         config_data = json.load(json_data_file)
 
     return config_data
@@ -21,9 +24,9 @@ class Config:
         self.observation = None
         self.model = None
 
-        self.observations = config_data['observations']
-        self.models = config_data['models']
-        self.defaults = config_data['defaults']
+        self.observations = config_data["observations"]
+        self.models = config_data["models"]
+        self.defaults = config_data["defaults"]
 
     def get_station_url(self):
         """
@@ -33,7 +36,7 @@ class Config:
             raise ValueError("Observation not set")
 
         return self.observations[self.observation]["stations"]["url"]
-    
+
     def get_data_url(self):
         """
         Returns the URL for the data to be downloaded.
